@@ -1,6 +1,7 @@
 #include "handle_command.h"
 #include "config.h"
 #include "ds18b20.h"
+#include "dump.h"
 #include "iap.h"
 #include "m590e.h"
 #include "main.h"
@@ -14,14 +15,14 @@
 #include <string.h>
 
 extern char _flash_start, _flash_end, _ram_start, _ram_end, _heap_start;
-extern volatile unsigned int gInterruptCause;
+extern volatile unsigned int wakeup_cause;
 extern volatile unsigned int millis;
 extern struct Output_Data output_data;
 
 void Handle_Command(char *pString) {
    char buf[256];
    unsigned char data[9];
-   int i, l;
+   int i, j, l;
    unsigned int t,params[12] = {0};
 
    mysprintf(buf, "<< %s >>", pString);
@@ -50,30 +51,17 @@ void Handle_Command(char *pString) {
             }
          }
          break;
-      case 0x696c: //oc [output channel]
-         if(params_count(params)==1) {
-            mysprintf(buf, "channel_mask: %d", output_data.channel_mask);
-            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            mysprintf(buf, "UART: %d", (int)eOutputChannelUART);
-            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-
-         }
-         else if(params_count(params)==2 && params[2]<=((1<<eOutputChannelLast)-1)) {
-            output_data.channel_mask = params[2];
-         }
-         break;
       case 0xaded: //om [output mask]
-         if(params_count(params)==2) {
-            for(i=0; i<(int)eOutputSubsystemLast; i++)
-               output_data.subsystem_mask[i] = params[2];
-         }
-         else if(params_count(params)==3 && params[2]<eOutputSubsystemLast) {
-            output_data.subsystem_mask[params[2]] = params[3];
-         }
-         else {
+         if(params_count(params)==1) {
+            mysprintf(buf,"eOutputChannelUART %d",(int)eOutputChannelUART);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf,"eOutputChannelSMS %d",(int)eOutputChannelUART);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"ADC %d",(int)eOutputSubsystemADC);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"DS18B20 %d",(int)eOutputSubsystemDS18B20);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf,"M590E %d",(int)eOutputSubsystemM590E);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"System %d",(int)eOutputSubsystemSystem);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
@@ -85,10 +73,23 @@ void Handle_Command(char *pString) {
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"Important %d",(int)eOutputLevelImportant);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            for(i=0; i<(int)eOutputSubsystemLast; i++) {
-               mysprintf(buf, "[%d] %u",i,(unsigned int)output_data.subsystem_mask[i]);
-               output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            }
+            for(i=0; i<(int)eOutputChannelLast; i++)
+               for(j=0; j<(int)eOutputSubsystemLast; j++) {
+                  mysprintf(buf, "[%d][%d] : %u", i, j, output_data.mask[i][j]);
+                  output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+               }
+         }
+         if(params_count(params)==2 && params[2]<(1<<3)) {
+            for(i=0; i<(int)eOutputChannelLast; i++)
+               for(j=0; j<(int)eOutputSubsystemLast; j++)
+                  output_data.mask[i][j] = params[2];
+         }
+         else if(params_count(params)==3 && params[2]<eOutputChannelLast && params[3]<(1<<3)) {
+            for(i=0; i<(int)eOutputSubsystemLast; i++)
+               output_data.mask[params[2]][i] = params[3];
+         }
+         else if(params_count(params)==4 && params[2]<eOutputChannelLast && params[3]<eOutputSubsystemLast && params[4]<(1<<3)) {
+            output_data.mask[params[2]][params[3]] = params[4];
          }
          break;
       case 0x7f7e: //iap_info
@@ -121,7 +122,7 @@ void Handle_Command(char *pString) {
             float v;
             v = DS18B20_GetTemperature(data);
             mysprintf(buf, "ds18b20 t: %f2 C",(char*)&v);
-            output(buf, eOutputSubsystemDS18B20, eOutputLevelDebug);
+            output(buf, eOutputSubsystemDS18B20, eOutputLevelImportant);
          }
          break;
       case 0xad7e: //m [m590e]
@@ -145,6 +146,9 @@ void Handle_Command(char *pString) {
             }
             UART1_Transmit(buf, l);
          }
+         break;
+      case 0xba23: //dump
+         dump_print();
          break;
       default:
          output("unknown command", eOutputSubsystemSystem, eOutputLevelImportant);

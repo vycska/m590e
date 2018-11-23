@@ -1,5 +1,6 @@
 #include "uart.h"
 #include "clocks.h"
+#include "dump.h"
 #include "fifos.h"
 #include "main.h"
 #include "output.h"
@@ -10,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern volatile unsigned int gInterruptCause;
 extern struct Fifo fifo_command_parser;
 extern struct Fifo fifo_m590e_responses;
 
@@ -25,7 +25,7 @@ void UART0_Init(void) {
    USART0OSR= 0xf; //oversample 16
    USART0CTL = (0<<1 | 0<<2 | 0<<6 | 0<<16); //no break, no address detect mode, transmit not disabled, autobaud disabled
    USART0INTENSET = (1<<0); //interrupt when there is a received character
-   IPR0 = (IPR0&(~(3u<<30))) | (2u<<30); //UART0 interrupt priority 2 (0 = highest, 3 = lowest)
+   IPR0 = (IPR0&(~(3u<<30))) | (1u<<30); //UART0 interrupt priority 2 (0 = highest, 3 = lowest)
    ISER0 = (1<<3); //UART0 interrupt enable
    USART0CFG = (1<<0 | 1<<2 | 0<<4 | 0<<6 | 0<<9 | 0<<11 | 0<<15); //USART0 enable, 8b data length, no parity, 1 stop bit, no flow control, asynchronous mode, no loopback mode
 }
@@ -76,7 +76,7 @@ void UART1_Init(void) {
    USART1CTL = (0<<1 | 0<<2 | 0<<6 | 0<<16); //no continuous break sending, disable address detect mode, transmitter not disabled, autobaud disabled
    USART1INTENCLR = (1<<2 | 1<<3 | 1<<5 | 1<<6 | 1<<8 | 1<<11 | 1<<12 | 1<<13 | 1<<14 | 1<<15 | 1<<16); //clear all interrupts except RXRDY
    USART1INTENSET = (1<<0); //interrupt when there is a received character available
-   IPR1 = (IPR1 & (~(0x3<<6))) | (2<<6);
+   IPR1 = (IPR1 & (~(0x3<<6))) | (1<<6);
    ISER0 = (1<<4); //UART1 interrupt enable
    USART1CFG = (1<<0 | 1<<2 | 0<<4 | 0<<6 | 0<<9 | 0<<11 | 0<<15); //enable USART1, 8b data length, no parity, 1 stop bit, no flow control, asynchronous mode, no loopback mode
 }
@@ -93,7 +93,13 @@ void UART1_IRQHandler(void) {
    unsigned char c;
    if((USART1STAT>>0)&1) { //RXRDY
       c = USART1RXDAT&0xff;
-      if(isprint(c)) {
+      dump_put(c);
+      if(c=='>' && uart1_data.i==0) {
+         uart1_data.s[0] = c;
+         uart1_data.s[1] = '\0';
+         Fifo_Put(&fifo_m590e_responses, uart1_data.s);
+      }
+      else if(isprint(c) && !(c==' ' && uart1_data.i==0)) {
          uart1_data.s[uart1_data.i++] = c;
          if(uart1_data.i >= UART1_IN_MAX)
             uart1_data.i = 0;

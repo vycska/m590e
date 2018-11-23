@@ -5,14 +5,14 @@
 #include "vswitch.h"
 #include "lpc824.h"
 
-extern volatile unsigned int gInterruptCause;
+extern volatile unsigned int wakeup_cause;
 extern volatile unsigned int millis;
 extern struct Ring_Data ring_data;
 extern struct VSwitch_Data vswitch_data;
 
 void SysTick_Init(void) {
    SYST_CSR = (0<<0 | 0<<1); //counter disabled, interrupt disabled
-   SHPR3 = (SHPR3 & (~(0x3u<<30))) | (3u<<30); //set the lowest priority [3]
+   SHPR3 = (SHPR3 & (~(0x3u<<30))) | (1u<<30); //set the priority
 }
 
 void SysTick_Start(void) {
@@ -39,18 +39,21 @@ void SysTick_Handler(void) {
          vswitch_data.duration -= 500;
          RISE = (1<<0);
          SIENR = (1<<0);
-         gInterruptCause |= (1<<3);
+         wakeup_cause |= (1<<eWakeupCauseVSwitchReleased);
       }
    }
    if(ring_data.active) {
+      ring_data.duration += 1;
       if(Ring_Active()) {
          ring_data.delay = 0;
       }
       else if(++ring_data.delay == 3000) {
          ring_data.active = 0;
          ring_data.delay = 0;
+         ring_data.duration -= 3000;
          FALL = (1<<1);
          SIENF = (1<<1);
+         wakeup_cause |= (1<<eWakeupCauseRingEnded);
       }
    }
 }

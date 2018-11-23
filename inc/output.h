@@ -3,26 +3,27 @@
 
 enum eOutputChannel {
    eOutputChannelUART         = 0,
-   eOutputChannelLast         = 1
+   eOutputChannelSMS          = 1,
+   eOutputChannelLast         = 2
 };
 
 enum eOutputSubsystem {
    eOutputSubsystemADC        = 0,
    eOutputSubsystemDS18B20    = 1,
-   eOutputSubsystemSystem     = 2,
-   eOutputSubsystemVSwitch    = 3,
-   eOutputSubsystemLast       = 4
+   eOutputSubsystemM590E      = 2,
+   eOutputSubsystemSystem     = 3,
+   eOutputSubsystemVSwitch    = 4,
+   eOutputSubsystemLast       = 5
 };
 
-enum eOutputLevel {
+enum eOutputLevel { //kuris bitas kaukeje; reiksme 1 tame bite reiskia uzblokavima
    eOutputLevelDebug          = 0,
    eOutputLevelNormal         = 1,
    eOutputLevelImportant      = 2
 };
 
 struct Output_Data {
-   unsigned char channel_mask;
-   unsigned char subsystem_mask[eOutputSubsystemLast];
+   unsigned char mask[eOutputChannelLast][eOutputSubsystemLast];
 };
 
 void output(char*, enum eOutputSubsystem, enum eOutputLevel);

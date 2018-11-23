@@ -25,12 +25,14 @@ extern char _data_start_lma, _data_start, _data_end, _bss_start, _bss_end;
 extern char _flash_start, _flash_end, _ram_start, _ram_end;
 extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _data_size, _bss_size, _stack_size, _heap_size;
 
-extern struct pt pt_m590e_ring;
+extern struct pt pt_m590e_smsparse,
+                 pt_m590e_smssend;
+extern struct M590E_Data m590e_data;
 extern struct Output_Data output_data;
 extern struct Ring_Data ring_data;
 extern struct VSwitch_Data vswitch_data;
 
-volatile unsigned int gInterruptCause;
+volatile unsigned int wakeup_cause;
 volatile unsigned int millis;
 struct Fifo fifo_command_parser, fifo_m590e_responses;
 
@@ -70,7 +72,8 @@ void main(void) {
    Fifo_Init(&fifo_command_parser);
    Fifo_Init(&fifo_m590e_responses);
 
-   PT_INIT(&pt_m590e_ring);
+   PT_INIT(&pt_m590e_smsparse);
+   PT_INIT(&pt_m590e_smssend);
 
    for(i=0; i<=13; i++) {
       switch(i) {
@@ -133,40 +136,58 @@ void main(void) {
    }
 
    while(1) {
-      while((cause=gInterruptCause)!=0) { //atomic interrupt safe read
-         //if(cause & (1<<0)) { //button pressed and no deep-sleep mode active
-            if(Fifo_Get(&fifo_command_parser, &s))
-               Handle_Command(s);
-            if((cause&(1<<1))==0 && Fifo_Get(&fifo_m590e_responses, &s))
-               output(s, eOutputSubsystemSystem, eOutputLevelImportant);
-         //}
-         if(cause & (1<<1)) { //Ring
+      while((cause=wakeup_cause)!=0) { //atomic interrupt safe read
+         if(Fifo_Get(&fifo_command_parser, &s))
+            Handle_Command(s);
+
+         if((cause&(1<<eWakeupCauseVSwitchReleased)) != 0) {
+            mysprintf(buf, "vswitch duration: %d",vswitch_data.duration);
+            output(buf, eOutputSubsystemVSwitch, eOutputLevelDebug);
+            _disable_irq();
+            wakeup_cause &= (~(1<<eWakeupCauseVSwitchReleased));
+            _enable_irq();
+         }
+
+         if((cause&(1<<eWakeupCauseRingActive))==0 && (cause&(1<<eWakeupCauseSmsSending))==0 && Fifo_Get(&fifo_m590e_responses, &s)) {
+            output(s, eOutputSubsystemSystem, eOutputLevelNormal);
+         }
+
+         if((cause&(1<<eWakeupCauseRingActive)) != 0) {
             if(!ring_data.active) {
-               if(PT_SCHEDULE(Handle_M590E_Ring(&pt_m590e_ring)) == 0) {
-                  output("ring processing ended", eOutputSubsystemSystem, eOutputLevelImportant);
+               if(PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse)) == 0) {
                   _disable_irq();
-                  gInterruptCause &= (~(1<<1));
+                  wakeup_cause &= (~(1<<eWakeupCauseRingActive));
                   _enable_irq();
                }
             }
          }
-         if(cause & (1<<3)) { //button released
-            mysprintf(buf, "switch %d",vswitch_data.duration);
-            output(buf, eOutputSubsystemVSwitch, eOutputLevelDebug);
+
+         if((cause&(1<<eWakeupCauseRingEnded)) != 0) {
+            mysprintf(buf, "ring duration: %d", ring_data.duration);
+            output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             _disable_irq();
-            gInterruptCause &= (~(1<<3));
+            wakeup_cause &= (~(1<<eWakeupCauseRingEnded));
             _enable_irq();
          }
+
+         if((cause&(1<<eWakeupCauseSmsSending)) != 0) {
+            if(PT_SCHEDULE(M590E_SMSSend(&pt_m590e_smssend)) == 0) {
+               _disable_irq();
+               wakeup_cause &= (~(1<<eWakeupCauseSmsSending));
+               _enable_irq();
+            }
+         }
       }
+
       _disable_irq();
-      if(gInterruptCause == 0 && !vswitch_data.active) {
+      if(wakeup_cause == 0 && !vswitch_data.active) {
          _enable_irq();
          SysTick_Stop();
          LED_Off();
          _wfi();
          LED_On();
          SysTick_Start();
-         output("awake from dreaming", eOutputSubsystemSystem, eOutputLevelImportant);
+         output("awake from dreaming", eOutputSubsystemSystem, eOutputLevelDebug);
       }
       _enable_irq();
    }
