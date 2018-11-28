@@ -8,17 +8,16 @@
 #define MAX_SRC_SIZE 13
 
 struct M590E_Data {
-   char source_number[MAX_SRC_SIZE];
+   char response[3][64],
+        source_number[MAX_SRC_SIZE];
    int mutex;
-};
-
-struct Ring_Data {
-   volatile int active, delay, duration;
+   volatile int ring_active, ring_delay, ring_duration;
 };
 
 void M590E_Init(void);
 int Ring_Active(void);
-PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, char **lines, int delay));
+void M590E_Send_Blocking(char *msg, int len, int k, int delay);
+PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay));
 PT_THREAD(M590E_SMSInit(struct pt *pt, int *ok));
 PT_THREAD(M590E_SMSParse(struct pt *pt));
 PT_THREAD(M590E_SMSSend(struct pt *pt));

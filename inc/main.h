@@ -11,6 +11,7 @@ enum Wakeup_Cause {
    eWakeupCauseSmsSending        = 4
 };
 
-void SystemReset(void);
+void System_Reset(void);
+void Init_Print(int);
 
 #endif

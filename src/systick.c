@@ -6,17 +6,19 @@
 #include "lpc824.h"
 
 extern volatile unsigned int wakeup_cause;
-extern volatile unsigned int millis;
-extern struct Ring_Data ring_data;
+extern struct M590E_Data m590e_data;
 extern struct VSwitch_Data vswitch_data;
 
-void SysTick_Init(void) {
+struct SysTick_Data systick_data;
+
+void SysTick_Init(int start) {
    SYST_CSR = (0<<0 | 0<<1); //counter disabled, interrupt disabled
    SHPR3 = (SHPR3 & (~(0x3u<<30))) | (1u<<30); //set the priority
+   if(start) SysTick_Start();
 }
 
 void SysTick_Start(void) {
-   millis = 0;
+   systick_data.millis = 0;
    SYST_RVR = SYSTEM_CLOCK/1000 -1; //1ms
    SYST_CVR = 0; //writing any value clear counter and the COUNTFLAG bit
    SYST_CSR = (1<<0 | 1<<1 | 1<<2); //enable counter, enable interrupt, clock source is system clock
@@ -27,7 +29,7 @@ void SysTick_Stop(void) {
 }
 
 void SysTick_Handler(void) {
-   millis += 1;
+   systick_data.millis += 1;
    if(vswitch_data.active) {
       vswitch_data.duration += 1;
       if(VSwitch_Pressed()) {
@@ -42,15 +44,15 @@ void SysTick_Handler(void) {
          wakeup_cause |= (1<<eWakeupCauseVSwitchReleased);
       }
    }
-   if(ring_data.active) {
-      ring_data.duration += 1;
+   if(m590e_data.ring_active) {
+      m590e_data.ring_duration += 1;
       if(Ring_Active()) {
-         ring_data.delay = 0;
+         m590e_data.ring_delay = 0;
       }
-      else if(++ring_data.delay == 3000) {
-         ring_data.active = 0;
-         ring_data.delay = 0;
-         ring_data.duration -= 3000;
+      else if(++m590e_data.ring_delay == 3000) {
+         m590e_data.ring_active = 0;
+         m590e_data.ring_delay = 0;
+         m590e_data.ring_duration -= 3000;
          FALL = (1<<1);
          SIENF = (1<<1);
          wakeup_cause |= (1<<eWakeupCauseRingEnded);

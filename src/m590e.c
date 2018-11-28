@@ -21,7 +21,6 @@ struct pt pt_m590e_smsparse,
 struct timer timer_m590e_ring,
              timer_m590e_sms;
 struct M590E_Data m590e_data;
-struct Ring_Data ring_data;
 
 void M590E_Init(void) {
    //Ring on PIO0_17
@@ -50,70 +49,93 @@ void PININT1_IRQHandler(void) {
    CIENF = (1<<1); //disable falling edge interrupt
    FALL = (1<<1); //clear detected falling edge
    wakeup_cause |= (1<<eWakeupCauseRingActive);
-   if(ring_data.active == 0) {
-      ring_data.active = 1;
-      ring_data.delay = 0;
-      ring_data.duration = 0;
+   if(m590e_data.ring_active == 0) {
+      m590e_data.ring_active = 1;
+      m590e_data.ring_delay = 0;
+      m590e_data.ring_duration = 0;
    }
 }
 
-PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, char **lines, int delay)) {
+void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
+   char *s;
+   int i;
+   struct timer timer;
+   UART1_Transmit(msg, len);
+   for(i=0; i<k; i++) {
+      timer_set(&timer, delay);
+      while(!(Fifo_Peek(&fifo_m590e_responses, &s)==1 || timer_expired(&timer)));
+      if(s != 0) {
+         strcpy(m590e_data.response[i], s);
+         Fifo_Remove(&fifo_m590e_responses);
+      }
+      else {
+         strcpy(m590e_data.response[i],"\0");
+         break;
+      }
+   }
+}
+
+PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay)) {
    char *s;
    static int i;
-   static struct timer timer_m590e_recieve;
+   static struct timer timer;
 
    PT_BEGIN(pt);
    UART1_Transmit(msg, len);
    for(i=0; i<k; i++) {
-      timer_set(&timer_m590e_recieve, delay);
-      PT_WAIT_UNTIL(pt, ((s=0, Fifo_Get(&fifo_m590e_responses, &s)==1) || timer_expired(&timer_m590e_recieve)));
-      lines[i] = (s!=0 ? s : 0);
+      timer_set(&timer, delay);
+      PT_WAIT_UNTIL(pt, Fifo_Peek(&fifo_m590e_responses, &s)==1 || timer_expired(&timer));
+      if(s!=0) {
+         strcpy(m590e_data.response[i], s);
+         Fifo_Remove(&fifo_m590e_responses);
+      }
+      else strcpy(m590e_data.response[i],"\0");
    }
    PT_END(pt);
 }
 
-PT_THREAD(M590E_SMSInit(struct pt *pt, int *ok)) {
-   static char buf[32], *lines[3];
+PT_THREAD(M590E_SMSInit(struct pt *pt, int *result)) {
+   static char buf[32];
    static int l;
 
    PT_BEGIN(pt);
 
-   *ok = 1;
+   *result = 1;
 
    l = mysprintf(buf, "ATE0\r");
-   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, lines, 2000));
-   if((strcmp(lines[0],"ATE0")==0 && strcmp(lines[1],"OK")==0) || strcmp(lines[0],"OK")==0) {
+   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+   if((strcmp(m590e_data.response[0],"ATE0")==0 && strcmp(m590e_data.response[1],"OK")==0) || strcmp(m590e_data.response[0],"OK")==0) {
       strcpy(buf+l-1, " ok");
       output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
    }
    else {
-      *ok = 0;
+      *result = 0;
       strcpy(buf+l-1, " error");
       output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
       PT_EXIT(pt);
    }
 
    l = mysprintf(buf, "AT+CMGF=1\r");
-   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, lines, 2000));
-   if(strcmp(lines[0],"OK")==0) {
+   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+   if(strcmp(m590e_data.response[0],"OK")==0) {
       strcpy(buf+l-1, " ok");
       output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
    }
    else {
-      *ok = 0;
+      *result = 0;
       strcpy(buf+l-1, " error");
       output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
       PT_EXIT(pt);
    }
 
-   l = mysprintf(buf, "AT+CSCS=\"GSM\"\r");
-   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, lines, 2000));
-   if(strcmp(lines[0],"OK")==0) {
+   l = mysprintf(buf, "AT+CSCS=\"8859-1\"\r");
+   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+   if(strcmp(m590e_data.response[0],"OK")==0) {
       strcpy(buf+l-1, " ok");
       output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
    }
    else {
-      *ok = 0;
+      *result = 0;
       strcpy(buf+l-1, " error");
       output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
       PT_EXIT(pt);
@@ -124,8 +146,8 @@ PT_THREAD(M590E_SMSInit(struct pt *pt, int *ok)) {
 
 PT_THREAD(M590E_SMSParse(struct pt *pt)) {
    char *s;
-   static char buf[32], *lines[3];
-   static int i, l, init_ok, error;
+   static char buf[32];
+   static int i, l, status;
 
    PT_BEGIN(pt);
 
@@ -135,41 +157,37 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
 
    Fifo_Clear(&fifo_m590e_responses);
 
-   PT_SPAWN(pt, &pt_m590e_smsinit, M590E_SMSInit(&pt_m590e_smsinit, &init_ok));
+   PT_SPAWN(pt, &pt_m590e_smsinit, M590E_SMSInit(&pt_m590e_smsinit, &status));
 
-   if(!init_ok) {
-      m590e_data.mutex = 1;
-      PT_EXIT(pt);
-   }
-
-   for(error=0, i=1; !error; i++) {
-      l = mysprintf(buf,"AT+CMGR=%d\r",i);
-      PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 3, lines, 2000));
-      if(strcmp(lines[2], "OK")==0) {
-         if((s=strstr(lines[0], "REC UNREAD"))!=0 && (s=strchr(s, '+'))!=0) {
-            strncpy(m590e_data.source_number, s, 12);
-            m590e_data.source_number[12] = 0;
-            Fifo_Put(&fifo_command_parser, lines[1]);
-            PT_YIELD(pt); //susispenduojam, kad ivyktu komandos apdorojimas
-            m590e_data.source_number[0] = 0;
+   if(status == 1) {
+      for(i=1; status==1; i++) {
+         l = mysprintf(buf,"AT+CMGR=%d\r",i);
+         PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 3, 2000));
+         if(strcmp(m590e_data.response[2], "OK")==0) {
+            if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=0 && (s=strchr(s, '+'))!=0) {
+               strncpy(m590e_data.source_number, s, MAX_SRC_SIZE-1);
+               m590e_data.source_number[MAX_SRC_SIZE-1] = 0;
+               Fifo_Put(&fifo_command_parser, m590e_data.response[1]);
+               PT_YIELD(pt); //susispenduojam, kad ivyktu komandos apdorojimas
+            }
+         }
+         else {
+            status = 0;
+            strcpy(buf+l-1, " error");
+            output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
          }
       }
+
+      l = mysprintf(buf, "AT+CMGD=1,1\r");
+      PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+      if(strcmp(m590e_data.response[0],"OK")==0) {
+         strcpy(buf+l-1, " ok");
+         output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+      }
       else {
-         error = 1;
          strcpy(buf+l-1, " error");
          output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
       }
-   }
-
-   l = mysprintf(buf, "AT+CMGD=1,1\r");
-   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, lines, 2000));
-   if(strcmp(lines[0],"OK") == 0) {
-      strcpy(buf+l-1, " ok");
-      output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
-   }
-   else {
-      strcpy(buf+l-1, " error");
-      output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
    }
 
    m590e_data.mutex = 1;
@@ -178,11 +196,11 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
 }
 
 PT_THREAD(M590E_SMSSend(struct pt *pt)) {
-   struct Fifo_SMS_Item sms;
-   static char buf[32], msg[MAX_SMS_SIZE], src[MAX_SRC_SIZE], *lines[2];
-   static int k ,l, init_ok;
-   static struct timer timer_fifo_get;
-   int i;
+   static char buf[32], sending_sms[MAX_SMS_SIZE];
+   static int l, status, sending_sms_len;
+   static struct timer timer;
+   char *interim_sms;
+   int i, *interim_sms_len;
 
    PT_BEGIN(pt);
 
@@ -192,63 +210,62 @@ PT_THREAD(M590E_SMSSend(struct pt *pt)) {
 
    Fifo_Clear(&fifo_m590e_responses);
 
-   k = 0;
+   PT_SPAWN(pt, &pt_m590e_smsinit, M590E_SMSInit(&pt_m590e_smsinit, &status));
 
-   while(Fifo_SMS_Peek(&sms) && k<MAX_SMS_SIZE-1 && (k==0?(strcpy(src,sms.src),1) : (strcmp(src,sms.src)==0))) { //-1 nes sms'o gale dar pridesim \x1a
-      l = MIN2(MAX_SMS_SIZE-1-k,sms.len);
-      strncpy(msg+k, sms.msg, l);
-      k += l;
-      if(l == sms.len) { //tilpo pilnas sms'as
-         if(k<MAX_SMS_SIZE-1) msg[k++] = '\n';
-         Fifo_SMS_Remove();
-         timer_set(&timer_fifo_get, 1000);
-         PT_WAIT_UNTIL(pt, Fifo_SMS_Peek(&sms)==1 || timer_expired(&timer_fifo_get));
+   while(status) {
+      switch(status) {
+         case 1: //suformuojama sms'a
+            for(sending_sms_len=0; Fifo_SMS_Count()>0 && sending_sms_len<MAX_SMS_SIZE-1; ) { //-1 nes sms'o gale dar pridesim \x1a
+               Fifo_SMS_Peek(&interim_sms, &interim_sms_len);
+               l = MIN2(MAX_SMS_SIZE-1-sending_sms_len, *interim_sms_len);
+               strncpy(sending_sms+sending_sms_len, interim_sms, l);
+               sending_sms_len += l;
+               if(l == *interim_sms_len) { //tilpo pilnas sms'as
+                  if(sending_sms_len < MAX_SMS_SIZE-1) sending_sms[sending_sms_len++] = '\n';
+                  Fifo_SMS_Remove();
+                  timer_set(&timer, 1000);
+                  PT_WAIT_UNTIL(pt, Fifo_SMS_Count()>0 || timer_expired(&timer));
+               }
+               else { //pakoreguojame fifo esancia zinute [nes dali jos jau idejome i siunciama sms]
+                  for(i=l; i<*interim_sms_len; i++)
+                     interim_sms[i-l] = interim_sms[i];
+                  *interim_sms_len -= l;
+               }
+            }
+            for(i=0; i<sending_sms_len; i++)
+               if(sending_sms[i]=='\r') sending_sms[i]=' ';
+            sending_sms[sending_sms_len++] = '\x1a';
+            status = 2;
+            break;
+         case 2: //issiunciam numeri
+            l = mysprintf(buf, "AT+CMGS=\"%s\"\r", strlen(m590e_data.source_number)==MAX_SRC_SIZE-1 ? m590e_data.source_number : "+37061525451");
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+            if(strcmp(m590e_data.response[0],">") == 0) {
+               status = 3;
+               strcpy(buf+l-1, " ok");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            else {
+               status = 0;
+               strcpy(buf+l-1, " error");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            break;
+         case 3: //issiunciam zinute
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, sending_sms, sending_sms_len, 2, 5000));
+            if(strcmp(m590e_data.response[1],"OK") == 0) {
+               status = Fifo_SMS_Count()>0;
+               output(m590e_data.response[0], eOutputSubsystemM590E, eOutputLevelDebug);
+               output(m590e_data.response[1], eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            else {
+               status = 0;
+            }
+            break;
       }
-      else {
-         for(i=l; i<sms.len; i++)
-            sms.msg[i-l] = sms.msg[i];
-         sms.len -= l;
-         Fifo_SMS_Change(sms.msg, sms.len, sms.src);
-      }
    }
 
-   msg[k++] = '\x1a';
-   for(i=0; i<k; i++)
-      if(msg[i]=='\r') msg[i]=' ';
-
-   PT_SPAWN(pt, &pt_m590e_smsinit, M590E_SMSInit(&pt_m590e_smsinit, &init_ok));
-
-   if(!init_ok) {
-      m590e_data.mutex = 1;
-      PT_EXIT(pt);
-   }
-
-   l = mysprintf(buf, "AT+CMGS=\"%s\"\r", src);
-   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, lines, 2000));
-   if(strcmp(lines[0],">") == 0) {
-      strcpy(buf+l-1, " ok");
-      output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
-   }
-   else {
-      strcpy(buf+l-1, " error");
-      output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
-      m590e_data.mutex = 1;
-      PT_EXIT(pt);
-   }
-
-   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, msg, k, 2, lines, 5000));
-   if(strcmp(lines[1],"OK") == 0) {
-      output("SMS send ok", eOutputSubsystemM590E, eOutputLevelDebug);
-   }
-   else {
-      output("SMS send error", eOutputSubsystemM590E, eOutputLevelDebug);
-   }
-
-   if(Fifo_SMS_Peek(&sms)) {
-      m590e_data.mutex = 1;
-      PT_RESTART(pt);
-   }
-
+   strcpy(m590e_data.source_number, "\0");
    m590e_data.mutex = 1;
 
    PT_END(pt);

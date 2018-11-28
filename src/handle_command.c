@@ -7,6 +7,7 @@
 #include "main.h"
 #include "mrt.h"
 #include "output.h"
+#include "systick.h"
 #include "uart.h"
 #include "utils.h"
 #include "lpc824.h"
@@ -16,8 +17,9 @@
 
 extern char _flash_start, _flash_end, _ram_start, _ram_end, _heap_start;
 extern volatile unsigned int wakeup_cause;
-extern volatile unsigned int millis;
+extern struct M590E_Data m590e_data;
 extern struct Output_Data output_data;
+extern struct SysTick_Data systick_data;
 
 void Handle_Command(char *pString) {
    char buf[256];
@@ -32,10 +34,10 @@ void Handle_Command(char *pString) {
 
    switch(crc16((unsigned char *)params[1], strlen((char *)params[1]))) {
       case 0x6bd8: //reset
-         SystemReset();
+         System_Reset();
          break;
       case 0x57e6: //millis
-         mysprintf(buf, "%u", millis);
+         mysprintf(buf, "%u", systick_data.millis);
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x426e: //config_save
@@ -50,6 +52,9 @@ void Handle_Command(char *pString) {
                output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             }
          }
+         break;
+      case 0x042e: //ip [init print]
+         Init_Print(-1);
          break;
       case 0xaded: //om [output mask]
          if(params_count(params)==1) {
@@ -122,30 +127,20 @@ void Handle_Command(char *pString) {
             float v;
             v = DS18B20_GetTemperature(data);
             mysprintf(buf, "ds18b20 t: %f2 C",(char*)&v);
-            output(buf, eOutputSubsystemDS18B20, eOutputLevelImportant);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
          break;
       case 0xad7e: //m [m590e]
-         if(params_count(params)>1 && !params_integer(2, params)) {
-            l = strlen((char*)params[2]);
-            strcpy((char*)buf, (char*)params[2]);
-            if(params_count(params) == 2) {
-               buf[l++] = 13;
-            }
-            else {
-               for(i=3; i<=params_count(params); i++) {
-                  if(params_integer(i, params)) {
-                     buf[l++] = params[i];
-                  }
-                  else {
-                     buf[l++] = ' ';
-                     strcpy((char*)(buf+l), (char*)params[i]);
-                     l += strlen((char*)params[i]);
-                  }
-               }
-            }
-            UART1_Transmit(buf, l);
+         for(l=0,i=2; i<=params_count(params); i++) {
+            if(params_integer(i, params))
+               l += mysprintf(buf+l, i<params_count(params)?"%u ":"%c", params[i]);
+            else
+               l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
          }
+         M590E_Send_Blocking(buf, l, 3, 5000);
+         for(i=0; i<3; i++)
+            if(m590e_data.response[i][0]!=0)
+               output(m590e_data.response[i], eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0xba23: //dump
          dump_print();

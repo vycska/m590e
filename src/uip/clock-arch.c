@@ -40,12 +40,13 @@
  */
 
 #include "clock-arch.h"
+#include "systick.h"
 
-extern volatile unsigned int millis;
+extern struct SysTick_Data systick_data;
 
 /*---------------------------------------------------------------------------*/
 clock_time_t clock_time(void) {
-   return millis;
+   return systick_data.millis;
 }
 
 /*---------------------------------------------------------------------------*/

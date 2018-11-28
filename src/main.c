@@ -28,20 +28,15 @@ extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _da
 extern struct pt pt_m590e_smsparse,
                  pt_m590e_smssend;
 extern struct M590E_Data m590e_data;
-extern struct Output_Data output_data;
-extern struct Ring_Data ring_data;
 extern struct VSwitch_Data vswitch_data;
 
 volatile unsigned int wakeup_cause;
-volatile unsigned int millis;
 struct Fifo fifo_command_parser, fifo_m590e_responses;
 
 void main(void) {
-   char *s, buf[64];
-   unsigned char data[8];
-   int i, l, config_load_result;
+   char *s, buf[32];
+   int t;
    unsigned int cause;
-   float used_value;
 
    _disable_irq();
 
@@ -53,21 +48,14 @@ void main(void) {
    PRESETCTRL = (1<<2 | 1<<3 | 1<<4 | 1<<7 | 1<<10 | 1<<11 | 1<<24); //clear USART FRG, USART0, USART1, MRT, GPIO, flash controller, ADC reset
 
    ADC_Init(); //ADC pin P0.14
+   DeepSleep_Init();
    LED_Init(1);
-   SysTick_Init();
-   SysTick_Start();
+   SysTick_Init(1);
    UART0_Init();
    VSwitch_Init(); //virtual switch on pin P0.12
 
-   DeepSleep_Init();
-
    DS18B20_Init(); //this initializes one-wire pin P0.9
    M590E_Init();
-
-   ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
-   _enable_irq();
-
-   config_load_result = config_load();
 
    Fifo_Init(&fifo_command_parser);
    Fifo_Init(&fifo_m590e_responses);
@@ -75,7 +63,105 @@ void main(void) {
    PT_INIT(&pt_m590e_smsparse);
    PT_INIT(&pt_m590e_smssend);
 
-   for(i=0; i<=13; i++) {
+   ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
+   _enable_irq();
+
+   t = config_load();
+
+   Init_Print(t);
+
+   while(1) {
+      while((cause=wakeup_cause)!=0) { //atomic interrupt safe read
+         if(Fifo_Peek(&fifo_command_parser, &s)) {
+            Handle_Command(s);
+            Fifo_Remove(&fifo_command_parser);
+         }
+
+         if((cause&(1<<eWakeupCauseVSwitchReleased)) != 0) {
+            mysprintf(buf, "vswitch duration: %d",vswitch_data.duration);
+            output(buf, eOutputSubsystemVSwitch, eOutputLevelDebug);
+            _disable_irq();
+            wakeup_cause &= (~(1<<eWakeupCauseVSwitchReleased));
+            _enable_irq();
+         }
+
+         if((cause&(1<<eWakeupCauseRingActive))==0 && (cause&(1<<eWakeupCauseSmsSending))==0 && Fifo_Peek(&fifo_m590e_responses, &s)) {
+            output(s, eOutputSubsystemSystem, eOutputLevelNormal);
+            Fifo_Remove(&fifo_m590e_responses);
+         }
+
+         if((cause&(1<<eWakeupCauseRingActive)) != 0) {
+            if(!m590e_data.ring_active) {
+               if(PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse)) == 0) {
+                  _disable_irq();
+                  wakeup_cause &= (~(1<<eWakeupCauseRingActive));
+                  _enable_irq();
+               }
+            }
+         }
+
+         if((cause&(1<<eWakeupCauseRingEnded)) != 0) {
+            mysprintf(buf, "ring duration: %d", m590e_data.ring_duration);
+            output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            _disable_irq();
+            wakeup_cause &= (~(1<<eWakeupCauseRingEnded));
+            _enable_irq();
+         }
+
+         if((cause&(1<<eWakeupCauseSmsSending)) != 0) {
+            if(PT_SCHEDULE(M590E_SMSSend(&pt_m590e_smssend)) == 0) {
+               _disable_irq();
+               wakeup_cause &= (~(1<<eWakeupCauseSmsSending));
+               _enable_irq();
+            }
+         }
+      }
+
+      _disable_irq();
+      if(wakeup_cause == 0 && !vswitch_data.active) {
+         _enable_irq();
+         SysTick_Stop();
+         LED_Off();
+         _wfi();
+         LED_On();
+         SysTick_Start();
+      }
+      _enable_irq();
+   }
+}
+
+void init(void) {
+   char *dst, *src;
+   //copy data to ram
+   for(src = &_data_start_lma, dst = &_data_start; dst < &_data_end; src++, dst++)
+      *dst = *src;
+   //zero bss
+   for(dst = &_bss_start; dst < &_bss_end; dst++)
+      *dst = 0;
+}
+
+void DeepSleep_Init(void) {
+   PCON = (PCON & (~(0x7<<0))) | (1<<0); //deep-sleep mode
+   PDSLEEPCFG |= (1<<3 | 1<<6); //BOD for deep-sleep powered down, watchdog oscillator for deep-sleep powered down
+   PDAWAKECFG = (0<<0 | 0<<1 | 0<<2 | 1<<3 | 0<<4 | 1<<5 | 1<<6 | 1<<7 | 0xd<<8 | 0x6<<12 | 1<<15); //power configuration after wake up: IRC oscillator output powered, IRC oscillator power-down powered, flash powered, BOD powered down, ADC powered, crystal oscillator powered down, watchdog oscillator powered down, system PLL powered down, ACMP powered down
+   STARTERP0 = (1<<0 | 1<<1); //GPIO pint interrupt 0 and 1 wake-up enabled
+   STARTERP1 = 0; //all other interrupts for wake-up disabled
+   SCR = (SCR&(~(0x1<<1 | 0x1<<2))) | (0<<1 | 1<<2); //do not sleep when returning to thread mode, deep sleep is processor's low power mode
+}
+
+void System_Reset(void) {
+   _dsb();
+   AIRCR = (AIRCR & (~(1<<1 | 1<<2 | 0xffffu<<16))) | (1<<2 | 0x5fau<<16);
+   _dsb();
+   while(1);
+}
+
+void Init_Print(int config_load_result) {
+   char buf[64];
+   unsigned char data[8];
+   int i, j, l;
+   float used_value;
+   for(i=0; i<=14; i++) {
       switch(i) {
          case 0:
             mysprintf(buf,"build time: %s %s",__DATE__,__TIME__);
@@ -84,7 +170,8 @@ void main(void) {
             mysprintf(buf,"VERSION: %d",VERSION);
             break;
          case 2:
-            mysprintf(buf,"%s",config_load_result?"config load error":"config load ok");
+            l = mysprintf(buf, "%s", "config load: ");
+            mysprintf(buf+l, "%s", config_load_result==0?"ok":(config_load_result==1?"error":"unknown"));
             break;
          case 3:
             mysprintf(buf, "_flash_size: %u [0x%x - 0x%x]", (unsigned int)&_flash_size, (unsigned int)&_flash_start, (unsigned int)&_flash_end);
@@ -123,98 +210,15 @@ void main(void) {
             used_value = 100.0f * (float)l / (int)&_ram_size;
             mysprintf(buf, "ram used: %d [%f1%%]", l, (char*)&used_value);
             break;
+         case 14: //DS18B20
+            l = mysprintf(buf, "one-wire device: ");
+            if(DS18B20_ReadROM(data) == DS18B20_OK) {
+               for(j=0; j<8; j++)
+                  l += mysprintf(&buf[l], "0x%x%s", (unsigned int)data[j], j == 7 ? " " : "-");
+            }
+            else mysprintf(buf+l, "none");
+            break;
       }
       output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
    }
-
-   //DS18B20
-   if(DS18B20_ReadROM(data) == DS18B20_OK) {
-      l = mysprintf(buf, "one-wire device: ");
-      for(i = 0; i < 8; i++)
-         l += mysprintf(&buf[l], "0x%x%s", (unsigned int)data[i], i == 7 ? " " : "-");
-      output(buf, eOutputSubsystemDS18B20, eOutputLevelNormal);
-   }
-
-   while(1) {
-      while((cause=wakeup_cause)!=0) { //atomic interrupt safe read
-         if(Fifo_Get(&fifo_command_parser, &s))
-            Handle_Command(s);
-
-         if((cause&(1<<eWakeupCauseVSwitchReleased)) != 0) {
-            mysprintf(buf, "vswitch duration: %d",vswitch_data.duration);
-            output(buf, eOutputSubsystemVSwitch, eOutputLevelDebug);
-            _disable_irq();
-            wakeup_cause &= (~(1<<eWakeupCauseVSwitchReleased));
-            _enable_irq();
-         }
-
-         if((cause&(1<<eWakeupCauseRingActive))==0 && (cause&(1<<eWakeupCauseSmsSending))==0 && Fifo_Get(&fifo_m590e_responses, &s)) {
-            output(s, eOutputSubsystemSystem, eOutputLevelNormal);
-         }
-
-         if((cause&(1<<eWakeupCauseRingActive)) != 0) {
-            if(!ring_data.active) {
-               if(PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse)) == 0) {
-                  _disable_irq();
-                  wakeup_cause &= (~(1<<eWakeupCauseRingActive));
-                  _enable_irq();
-               }
-            }
-         }
-
-         if((cause&(1<<eWakeupCauseRingEnded)) != 0) {
-            mysprintf(buf, "ring duration: %d", ring_data.duration);
-            output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
-            _disable_irq();
-            wakeup_cause &= (~(1<<eWakeupCauseRingEnded));
-            _enable_irq();
-         }
-
-         if((cause&(1<<eWakeupCauseSmsSending)) != 0) {
-            if(PT_SCHEDULE(M590E_SMSSend(&pt_m590e_smssend)) == 0) {
-               _disable_irq();
-               wakeup_cause &= (~(1<<eWakeupCauseSmsSending));
-               _enable_irq();
-            }
-         }
-      }
-
-      _disable_irq();
-      if(wakeup_cause == 0 && !vswitch_data.active) {
-         _enable_irq();
-         SysTick_Stop();
-         LED_Off();
-         _wfi();
-         LED_On();
-         SysTick_Start();
-         output("awake from dreaming", eOutputSubsystemSystem, eOutputLevelDebug);
-      }
-      _enable_irq();
-   }
-}
-
-void init(void) {
-   char *dst, *src;
-   //copy data to ram
-   for(src = &_data_start_lma, dst = &_data_start; dst < &_data_end; src++, dst++)
-      *dst = *src;
-   //zero bss
-   for(dst = &_bss_start; dst < &_bss_end; dst++)
-      *dst = 0;
-}
-
-void DeepSleep_Init(void) {
-   PCON = (PCON & (~(0x7<<0))) | (1<<0); //deep-sleep mode
-   PDSLEEPCFG |= (1<<3 | 1<<6); //BOD for deep-sleep powered down, watchdog oscillator for deep-sleep powered down
-   PDAWAKECFG = (0<<0 | 0<<1 | 0<<2 | 1<<3 | 0<<4 | 1<<5 | 1<<6 | 1<<7 | 0xd<<8 | 0x6<<12 | 1<<15); //power configuration after wake up: IRC oscillator output powered, IRC oscillator power-down powered, flash powered, BOD powered down, ADC powered, crystal oscillator powered down, watchdog oscillator powered down, system PLL powered down, ACMP powered down
-   STARTERP0 = (1<<0 | 1<<1); //GPIO pint interrupt 0 and 1 wake-up enabled
-   STARTERP1 = 0; //all other interrupts for wake-up disabled
-   SCR = (SCR&(~(0x1<<1 | 0x1<<2))) | (0<<1 | 1<<2); //do not sleep when returning to thread mode, deep sleep is processor's low power mode
-}
-
-void SystemReset(void) {
-   _dsb();
-   AIRCR = (AIRCR & (~(1<<1 | 1<<2 | 0xffffu<<16))) | (1<<2 | 0x5fau<<16);
-   _dsb();
-   while(1);
 }

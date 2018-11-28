@@ -70,7 +70,7 @@ p :
 	picocom --baud 38400 --databits 8 --stopbits 1 --parity n --flow n --echo --quiet /dev/ttyUSB0
 
 t :
-	ctags -R --extra=+f *
+	ctags -R --extras=+f *
 	find . -name '*.[csh]' > cscope.files
 	cscope -q -R -b -i cscope.files
 

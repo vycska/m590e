@@ -1,7 +1,11 @@
 #ifndef __SYSTICK_H__
 #define __SYSTICK_H__
 
-void SysTick_Init(void);
+struct SysTick_Data {
+   unsigned int millis;
+};
+
+void SysTick_Init(int);
 void SysTick_Start(void);
 void SysTick_Stop(void);
 

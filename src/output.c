@@ -18,10 +18,10 @@ void output(char *buf, enum eOutputSubsystem subsystem, enum eOutputLevel level)
    if((output_data.mask[eOutputChannelUART][subsystem] & (1<<level)) != 0)
       UART0_Transmit(buf, l, 1);
 
-   if((output_data.mask[eOutputChannelSMS][subsystem]&(1<<level))!=0 && m590e_data.source_number[0]=='+' && level!=eOutputLevelDebug) {
+   if((output_data.mask[eOutputChannelSMS][subsystem]&(1<<level))!=0 && strlen(m590e_data.source_number)==MAX_SRC_SIZE-1) { //sms gali buti siunciamas tik tada, kai tai yra atsakymas i atsiusta sms uzklausa/komanda
       while(l>0) {
          ll = MIN2(l, FIFO_SMS_MSG_SIZE-1); //-1 nes buferyje dar talpinama '\0'
-         Fifo_SMS_Put(buf, ll, m590e_data.source_number);
+         Fifo_SMS_Put(buf, ll);
          l -= ll;
          buf += ll;
       }
