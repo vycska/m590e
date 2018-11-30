@@ -60,11 +60,7 @@ void Handle_Command(char *pString) {
          if(params_count(params)==1) {
             mysprintf(buf,"eOutputChannelUART %d",(int)eOutputChannelUART);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            mysprintf(buf,"eOutputChannelSMS %d",(int)eOutputChannelUART);
-            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            mysprintf(buf,"ADC %d",(int)eOutputSubsystemADC);
-            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            mysprintf(buf,"DS18B20 %d",(int)eOutputSubsystemDS18B20);
+            mysprintf(buf,"eOutputChannelSMS %d",(int)eOutputChannelSMS);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"M590E %d",(int)eOutputSubsystemM590E);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
@@ -126,7 +122,7 @@ void Handle_Command(char *pString) {
          if(DS18B20_ReadScratchpad(0,data)==DS18B20_OK) {
             float v;
             v = DS18B20_GetTemperature(data);
-            mysprintf(buf, "ds18b20 t: %f2 C",(char*)&v);
+            mysprintf(buf, "%f2 C",(char*)&v);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
          break;
@@ -141,6 +137,36 @@ void Handle_Command(char *pString) {
          for(i=0; i<3; i++)
             if(m590e_data.response[i][0]!=0)
                output(m590e_data.response[i], eOutputSubsystemSystem, eOutputLevelImportant);
+         break;
+      case 0xa4be: //p [periodic sms]
+         if(params_count(params)==1) {
+            for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
+               if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
+                  l = mysprintf(buf, "%s: ", m590e_data.periodic_sms[i].src);
+                  for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
+                     if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0)
+                        l += mysprintf(buf+l, "%s ", m590e_data.periodic_sms[i].commands[j]);
+                  }
+                  output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+               }
+            }
+         }
+         else if(params_count(params)==2 && !params_integer(2, params) && strncmp(m590e_data.source_number, "", 1) != 0) {
+            for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, m590e_data.source_number, MAX_SRC_SIZE-1)!=0; i++);
+            if(i == PERIODIC_SMS_RECIPIENTS)
+               for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0; i++);
+            if(i<PERIODIC_SMS_RECIPIENTS) {
+               strncpy(m590e_data.periodic_sms[i].src, m590e_data.source_number, MAX_SRC_SIZE-1);
+               m590e_data.periodic_sms[i].src[MAX_SRC_SIZE-1] = '\0';
+               for(j=0; j<PERIODIC_SMS_COMMANDS && strncmp(m590e_data.periodic_sms[i].commands[j],"",1)!=0; j++);
+               if(j == PERIODIC_SMS_COMMANDS) j=0;
+               strncpy(m590e_data.periodic_sms[i].commands[j], (char*)params[2], PERIODIC_SMS_COMMAND_SIZE-1);
+               m590e_data.periodic_sms[i].commands[j][PERIODIC_SMS_COMMAND_SIZE-1] = '\0';
+               mysprintf(buf, "i: %d, j: %d", i, j);
+               output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            }
+            else output("all recipients slots are occupied", eOutputSubsystemSystem, eOutputLevelImportant);
+         }
          break;
       case 0xba23: //dump
          dump_print();

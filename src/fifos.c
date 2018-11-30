@@ -1,4 +1,5 @@
 #include "fifos.h"
+#include "utils.h"
 #include <string.h>
 
 static struct Fifo_SMS fifo_sms;
@@ -54,21 +55,24 @@ void Fifo_SMS_Init(void) {
    fifo_sms.i_put = 0;
 }
 
-void Fifo_SMS_Put(char *msg, int len) {
+void Fifo_SMS_Put(char *msg, int len, char *src) {
    if(fifo_sms.count < FIFO_SMS_ITEMS) {
-      strncpy(fifo_sms.item[fifo_sms.i_put].msg, msg, len);
-      fifo_sms.item[fifo_sms.i_put].msg[len] = '\0';
-      fifo_sms.item[fifo_sms.i_put].len = len;
-      fifo_sms.count += 1;
+      strncpy(fifo_sms.item[fifo_sms.i_put].src, src, FIFO_SMS_SRC_SIZE-1);
+      fifo_sms.item[fifo_sms.i_put].src[FIFO_SMS_SRC_SIZE-1] = '\0';
+      strncpy(fifo_sms.item[fifo_sms.i_put].msg, msg, FIFO_SMS_MSG_SIZE-1);
+      fifo_sms.item[fifo_sms.i_put].msg[FIFO_SMS_MSG_SIZE-1] = '\0';
+      fifo_sms.item[fifo_sms.i_put].len = MIN2(len, FIFO_SMS_MSG_SIZE-1);
       fifo_sms.i_put += 1;
       if(fifo_sms.i_put == FIFO_SMS_ITEMS)
          fifo_sms.i_put = 0;
+      fifo_sms.count += 1;
    }
 }
 
-int Fifo_SMS_Peek(char **msg, int **len) {
+int Fifo_SMS_Peek(char **msg, int **len, char **src) {
    int res;
    if(fifo_sms.count > 0) {
+      *src = fifo_sms.item[fifo_sms.i_get].src;
       *msg = fifo_sms.item[fifo_sms.i_get].msg;
       *len = &fifo_sms.item[fifo_sms.i_get].len;
       res = 1;
@@ -77,9 +81,12 @@ int Fifo_SMS_Peek(char **msg, int **len) {
    return res;
 }
 
-void Fifo_SMS_Change(char *msg, int len) {
+void Fifo_SMS_Change(char *msg, int len, char *src) {
    if(fifo_sms.count > 0) {
-      strcpy(fifo_sms.item[fifo_sms.i_get].msg, msg);
+      strncpy(fifo_sms.item[fifo_sms.i_get].src, src, FIFO_SMS_SRC_SIZE-1);
+      fifo_sms.item[fifo_sms.i_get].src[FIFO_SMS_SRC_SIZE-1] = '\0';
+      strncpy(fifo_sms.item[fifo_sms.i_get].msg, msg, FIFO_SMS_MSG_SIZE-1);
+      fifo_sms.item[fifo_sms.i_get].msg[FIFO_SMS_MSG_SIZE-1] = '\0';
       fifo_sms.item[fifo_sms.i_get].len = len;
    }
 }

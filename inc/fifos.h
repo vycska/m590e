@@ -1,11 +1,14 @@
 #ifndef __FIFOS_H__
 #define __FIFOS_H__
 
+#include "m590e.h"
+
 #define FIFO_ITEMS 8
 #define FIFO_ITEM_SIZE 64
 
-#define FIFO_SMS_ITEMS 32
-#define FIFO_SMS_MSG_SIZE 40
+#define FIFO_SMS_ITEMS 24
+#define FIFO_SMS_SRC_SIZE MAX_SRC_SIZE
+#define FIFO_SMS_MSG_SIZE 48
 
 struct Fifo {
    volatile char buffer[FIFO_ITEMS][FIFO_ITEM_SIZE];
@@ -14,7 +17,7 @@ struct Fifo {
 };
 
 struct Fifo_SMS_Item {
-   char msg[FIFO_SMS_MSG_SIZE];
+   char src[FIFO_SMS_SRC_SIZE], msg[FIFO_SMS_MSG_SIZE];
    int len;
 };
 
@@ -31,9 +34,9 @@ void Fifo_Remove(struct Fifo*);
 void Fifo_Put(struct Fifo*, char*);
 
 void Fifo_SMS_Init(void);
-void Fifo_SMS_Put(char *msg, int len);
-int Fifo_SMS_Peek(char **msg, int **len);
-void Fifo_SMS_Change(char *msg, int len);
+void Fifo_SMS_Put(char *msg, int len, char *src);
+int Fifo_SMS_Peek(char **msg, int **len, char **src);
+void Fifo_SMS_Change(char *msg, int len, char *src);
 void Fifo_SMS_Remove(void);
 int Fifo_SMS_Count(void);
 

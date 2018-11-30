@@ -8,12 +8,10 @@ enum eOutputChannel {
 };
 
 enum eOutputSubsystem {
-   eOutputSubsystemADC        = 0,
-   eOutputSubsystemDS18B20    = 1,
-   eOutputSubsystemM590E      = 2,
-   eOutputSubsystemSystem     = 3,
-   eOutputSubsystemVSwitch    = 4,
-   eOutputSubsystemLast       = 5
+   eOutputSubsystemM590E      = 0,
+   eOutputSubsystemSystem     = 1,
+   eOutputSubsystemVSwitch    = 2,
+   eOutputSubsystemLast       = 3
 };
 
 enum eOutputLevel { //kuris bitas kaukeje; reiksme 1 tame bite reiskia uzblokavima

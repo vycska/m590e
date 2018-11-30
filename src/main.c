@@ -18,6 +18,7 @@
 #include "lpc824.h"
 #include "pt.h"
 #include "timer.h"
+#include <string.h>
 
 void DeepSleep_Init(void);
 
@@ -26,7 +27,8 @@ extern char _flash_start, _flash_end, _ram_start, _ram_end;
 extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _data_size, _bss_size, _stack_size, _heap_size;
 
 extern struct pt pt_m590e_smsparse,
-                 pt_m590e_smssend;
+                 pt_m590e_smssend,
+                 pt_m590e_smsperiodic;
 extern struct M590E_Data m590e_data;
 extern struct VSwitch_Data vswitch_data;
 
@@ -45,7 +47,7 @@ void main(void) {
 
    Clocks_Init();
 
-   PRESETCTRL = (1<<2 | 1<<3 | 1<<4 | 1<<7 | 1<<10 | 1<<11 | 1<<24); //clear USART FRG, USART0, USART1, MRT, GPIO, flash controller, ADC reset
+   PRESETCTRL = (1<<2 | 1<<3 | 1<<4 | 1<<7 | 1<<9 | 1<<10 | 1<<11 | 1<<24); //clear USART FRG, USART0, USART1, MRT, WKT, GPIO, flash controller, ADC reset
 
    ADC_Init(); //ADC pin P0.14
    DeepSleep_Init();
@@ -62,6 +64,7 @@ void main(void) {
 
    PT_INIT(&pt_m590e_smsparse);
    PT_INIT(&pt_m590e_smssend);
+   PT_INIT(&pt_m590e_smsperiodic);
 
    ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
    _enable_irq();
@@ -115,6 +118,13 @@ void main(void) {
                _enable_irq();
             }
          }
+         if((cause&(1<<eWakeupCauseTimer)) != 0) {
+            if(PT_SCHEDULE(M590E_SMSPeriodic(&pt_m590e_smsperiodic)) == 0) {
+               _disable_irq();
+               wakeup_cause &= (~(1<<eWakeupCauseTimer));
+               _enable_irq();
+            }
+         }
       }
 
       _disable_irq();
@@ -140,13 +150,22 @@ void init(void) {
       *dst = 0;
 }
 
+void WakeupTimer_Init(void) {
+   DPDCTRL = (0<<0 | 1<<1 | 1<<2 | 0<<3 | 0<<4 | 0<<5); //WAKEUP pin hysteresis disabled, WAKEUP pin disabled, low-power oscillator enabled, low-power oscillator in DPD mode disabled, WKTCLKIN pin hysteresis disabled, WKTCLKIN disabled
+   WKT_CTRL = (1<<0 | 1<<1 | 1<<2 | 0<<3); //clock source is low power clock (10kHz), clear alarm flag, clear the counter, clock source is internal
+   IPR3 = (IPR3 & (~(0x3<<30))) | (1<<30);
+   ISER0 = (1<<15);
+   WKT_COUNT= WAKEUP_SEC*10000;
+}
+
 void DeepSleep_Init(void) {
    PCON = (PCON & (~(0x7<<0))) | (1<<0); //deep-sleep mode
    PDSLEEPCFG |= (1<<3 | 1<<6); //BOD for deep-sleep powered down, watchdog oscillator for deep-sleep powered down
    PDAWAKECFG = (0<<0 | 0<<1 | 0<<2 | 1<<3 | 0<<4 | 1<<5 | 1<<6 | 1<<7 | 0xd<<8 | 0x6<<12 | 1<<15); //power configuration after wake up: IRC oscillator output powered, IRC oscillator power-down powered, flash powered, BOD powered down, ADC powered, crystal oscillator powered down, watchdog oscillator powered down, system PLL powered down, ACMP powered down
    STARTERP0 = (1<<0 | 1<<1); //GPIO pint interrupt 0 and 1 wake-up enabled
-   STARTERP1 = 0; //all other interrupts for wake-up disabled
+   STARTERP1 = (1<<15); //self-wake-up timer interrupt wake-up
    SCR = (SCR&(~(0x1<<1 | 0x1<<2))) | (0<<1 | 1<<2); //do not sleep when returning to thread mode, deep sleep is processor's low power mode
+   WakeupTimer_Init();
 }
 
 void System_Reset(void) {
@@ -221,4 +240,10 @@ void Init_Print(int config_load_result) {
       }
       output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
    }
+}
+
+void WKT_IRQHandler(void) {
+   WKT_CTRL |= (1<<1);
+   WKT_COUNT= WAKEUP_SEC*10000;
+   wakeup_cause |= (1<<eWakeupCauseTimer);
 }

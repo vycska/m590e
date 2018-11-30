@@ -23,6 +23,10 @@
 #define IDLE_CH                        (*((volatile uint32_t*)0x400040f4)) //idle channel register (returns the number of the first idle)
 #define IRQ_FLAG                       (*((volatile uint32_t*)0x400040f8)) //global interrupt flag register
 
+//WKT
+#define WKT_CTRL                       (*((volatile uint32_t*)0x40008000)) //self-wake-up-timer control register
+#define WKT_COUNT                      (*((volatile uint32_t*)0x4000800c)) //counter register
+
 //ADC
 #define ADCCTRL                        (*((volatile uint32_t*)0x4001c000)) //A/D control register
 #define ADCSEQA_CTRL                   (*((volatile uint32_t*)0x4001c008)) //A/D conversion sequence-A control register
