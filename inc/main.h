@@ -2,7 +2,6 @@
 #define __MAIN_H__
 
 #define VERSION 1
-#define WAKEUP_SEC 600
 
 enum Wakeup_Cause {
    eWakeupCauseVSwitchOn         = 0,
@@ -15,5 +14,6 @@ enum Wakeup_Cause {
 
 void System_Reset(void);
 void Init_Print(int);
+void WKT_Set(int);
 
 #endif

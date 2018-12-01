@@ -42,6 +42,7 @@ int iap_compare(unsigned int, unsigned int, int);
 void iap_reinvoke_isp(void);
 unsigned int *iap_read_uid(void);
 int iap_erase_page(int,int);
+int iflash_write(unsigned int addr, unsigned char *buf, int len);
 
 #endif
 

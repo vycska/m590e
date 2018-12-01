@@ -21,6 +21,7 @@ struct M590E_Data {
         source_number[MAX_SRC_SIZE];
    int mutex;
    volatile int ring_active, ring_delay, ring_duration;
+   int periodic_sms_interval;
    struct Periodic_SMS periodic_sms[PERIODIC_SMS_RECIPIENTS];
 };
 

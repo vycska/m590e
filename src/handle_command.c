@@ -41,7 +41,19 @@ void Handle_Command(char *pString) {
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x426e: //config_save
-         config_save();
+         t = config(1);
+         output(t==0 ? "ok" : "error",eOutputSubsystemSystem, eOutputLevelImportant);
+         break;
+      case 0x1804: //iflash_write
+         if(params_count(params)>2 && params_count(params)<=6) {
+            unsigned char data[4];
+            int res;
+            for(i=0; i<params_count(params)-2; i++)
+               data[i] = params[3+i];
+            res = iflash_write(params[2], data, i);
+            mysprintf(buf, res?"ok":"error");
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         }
          break;
       case 0x62bf: //x [value at address]
          if(params_count(params)==2 && !params_integer(2,params)) {
@@ -140,6 +152,8 @@ void Handle_Command(char *pString) {
          break;
       case 0xa4be: //p [periodic sms]
          if(params_count(params)==1) {
+            mysprintf(buf, "period: %d", m590e_data.periodic_sms_interval);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
                if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
                   l = mysprintf(buf, "%s: ", m590e_data.periodic_sms[i].src);
@@ -149,6 +163,17 @@ void Handle_Command(char *pString) {
                   }
                   output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
                }
+            }
+         }
+         else if(params_count(params)==2 && params_integer(2, params)) {
+            if(params[2] == 0 && strncmp(m590e_data.source_number,"",1)!=0) {
+               for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, m590e_data.source_number, MAX_SRC_SIZE-1)!=0; i++);
+               if(i<PERIODIC_SMS_RECIPIENTS)
+                  for(j=0; j<PERIODIC_SMS_COMMANDS; j++)
+                     strcpy(m590e_data.periodic_sms[i].commands[j], "\0");
+            }
+            else {
+               WKT_Set(m590e_data.periodic_sms_interval=params[2]);
             }
          }
          else if(params_count(params)==2 && !params_integer(2, params) && strncmp(m590e_data.source_number, "", 1) != 0) {

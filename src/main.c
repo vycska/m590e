@@ -49,6 +49,8 @@ void main(void) {
 
    PRESETCTRL = (1<<2 | 1<<3 | 1<<4 | 1<<7 | 1<<9 | 1<<10 | 1<<11 | 1<<24); //clear USART FRG, USART0, USART1, MRT, WKT, GPIO, flash controller, ADC reset
 
+   t = config(0); //load config
+
    ADC_Init(); //ADC pin P0.14
    DeepSleep_Init();
    LED_Init(1);
@@ -68,8 +70,6 @@ void main(void) {
 
    ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
    _enable_irq();
-
-   t = config_load();
 
    Init_Print(t);
 
@@ -150,12 +150,17 @@ void init(void) {
       *dst = 0;
 }
 
-void WakeupTimer_Init(void) {
+void WKT_Set(int sec) {
+   if(sec) //t.b. bent 1 min
+      WKT_COUNT= sec*10000;
+}
+
+void WKT_Init(void) {
    DPDCTRL = (0<<0 | 1<<1 | 1<<2 | 0<<3 | 0<<4 | 0<<5); //WAKEUP pin hysteresis disabled, WAKEUP pin disabled, low-power oscillator enabled, low-power oscillator in DPD mode disabled, WKTCLKIN pin hysteresis disabled, WKTCLKIN disabled
    WKT_CTRL = (1<<0 | 1<<1 | 1<<2 | 0<<3); //clock source is low power clock (10kHz), clear alarm flag, clear the counter, clock source is internal
    IPR3 = (IPR3 & (~(0x3<<30))) | (1<<30);
    ISER0 = (1<<15);
-   WKT_COUNT= WAKEUP_SEC*10000;
+   WKT_Set(m590e_data.periodic_sms_interval);
 }
 
 void DeepSleep_Init(void) {
@@ -165,7 +170,7 @@ void DeepSleep_Init(void) {
    STARTERP0 = (1<<0 | 1<<1); //GPIO pint interrupt 0 and 1 wake-up enabled
    STARTERP1 = (1<<15); //self-wake-up timer interrupt wake-up
    SCR = (SCR&(~(0x1<<1 | 0x1<<2))) | (0<<1 | 1<<2); //do not sleep when returning to thread mode, deep sleep is processor's low power mode
-   WakeupTimer_Init();
+   WKT_Init();
 }
 
 void System_Reset(void) {
@@ -244,6 +249,7 @@ void Init_Print(int config_load_result) {
 
 void WKT_IRQHandler(void) {
    WKT_CTRL |= (1<<1);
-   WKT_COUNT= WAKEUP_SEC*10000;
+   if(m590e_data.periodic_sms_interval >= 60) //t.b. bent 1 min
+      WKT_COUNT= m590e_data.periodic_sms_interval*10000;
    wakeup_cause |= (1<<eWakeupCauseTimer);
 }

@@ -1,7 +1,11 @@
 #include "iap.h"
 #include "main.h"
 #include "utils-asm.h"
+#include "utils.h"
 #include "lpc824.h"
+#include <string.h>
+
+extern char _flash_start, _flash_end;
 
 static unsigned int command[5] = { 0 }, result[5] = {0};
 
@@ -107,4 +111,19 @@ int iap_erase_page(int start_page, int end_page) {
    IAP_EXECUTE(command, result);
    _end_critical(primask);
    return result[0]; //CMD_SUCCESS | BUSY | SECTOR_NOT_PREPARED | INVALID_SECTOR
+}
+
+int iflash_write(unsigned int addr, unsigned char *buf, int len) {
+   unsigned char interim_page[64];
+   int l, p, res;
+
+   for(res=1; len>0 && addr>=(unsigned int)&_flash_start && addr<(unsigned int)&_flash_end; addr+=l, buf+=l, len-=l) {
+      p = addr / 64;
+      l = MIN2(len, 64-addr%64);
+      memcpy(interim_page, (void*)(p*64), 64);
+      memcpy(interim_page + addr%64, buf, l);
+      res = res && iap_erase_page(p, p)==IAP_CMD_SUCCESS;
+      res = res && iap_copy_ram_to_flash(p*64, interim_page, 64)==IAP_CMD_SUCCESS;
+   }
+   return res;
 }

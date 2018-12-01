@@ -1,15 +1,13 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-#define CONFIG_VERSION (2)
-#define CONFIG_PAGE (511)
+#define CONFIG_VERSION (3)
 
 struct Config_Data {
-   char *address_in_ram;
-   short size;
+   unsigned char *address_in_ram;
+   int size;
 };
 
-int config_load(void);
-void config_save(void);
+int config(int);
 
 #endif
