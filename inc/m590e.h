@@ -27,6 +27,8 @@ struct M590E_Data {
 
 void M590E_Init(void);
 int Ring_Active(void);
+void M590E_Sleep_Enter(void);
+void M590E_Sleep_Exit(void);
 void M590E_Send_Blocking(char *msg, int len, int k, int delay);
 PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay));
 PT_THREAD(M590E_SMSInit(struct pt *pt, int *ok));

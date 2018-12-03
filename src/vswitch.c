@@ -4,7 +4,7 @@
 #include "utils-asm.h"
 #include "lpc824.h"
 
-extern volatile unsigned int wakeup_cause;
+extern struct Main_Data main_data;
 
 struct VSwitch_Data vswitch_data;
 
@@ -27,7 +27,7 @@ int VSwitch_Pressed(void) {
 void PININT0_IRQHandler(void) {
    CIENR = (1<<0); //disable rising edge interrupt for pin selected in PINTSEL0
    RISE = (1<<0); //clear rising edge detection
-   wakeup_cause ^= (1<<eWakeupCauseVSwitchOn);
+   main_data.wakeup_cause ^= (1<<eWakeupCauseVSwitchOn);
    if(vswitch_data.active==0) {
       vswitch_data.active = 1;
       vswitch_data.delay = 0;

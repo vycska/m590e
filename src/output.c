@@ -8,8 +8,8 @@
 #include "lpc824.h"
 #include <string.h>
 
-extern volatile unsigned int wakeup_cause;
 extern struct M590E_Data m590e_data;
+extern struct Main_Data main_data;
 
 struct Output_Data output_data;
 
@@ -26,7 +26,7 @@ void output(char *buf, enum eOutputSubsystem subsystem, enum eOutputLevel level)
          buf += ll;
       }
       _disable_irq();
-      wakeup_cause |= (1<<eWakeupCauseSmsSending);
+      main_data.wakeup_cause |= (1<<eWakeupCauseSmsSending);
       _enable_irq();
    }
 }

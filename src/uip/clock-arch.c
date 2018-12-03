@@ -42,7 +42,7 @@
 #include "clock-arch.h"
 #include "systick.h"
 
-extern struct SysTick_Data systick_data;
+extern struct Systick_Data systick_data;
 
 /*---------------------------------------------------------------------------*/
 clock_time_t clock_time(void) {

@@ -17,7 +17,7 @@ struct Config_Data config_data[] = {
    {(unsigned char*)&m590e_data.periodic_sms_interval,   sizeof(m590e_data.periodic_sms_interval)}
 };
 
-int config(int mode) { //mode: 0 - load, 1 - save
+enum Config_Result config(enum Config_Mode mode) {
    int i, error;
    short total_size, config_version;
    unsigned int p;
@@ -27,26 +27,26 @@ int config(int mode) { //mode: 0 - load, 1 - save
       switch(i) {
          case -2:
             p -= 2;
-            if(mode==0)
+            if(mode==eConfigModeLoad)
                error = *((short*)p)!=config_version;
             else
                error = iflash_write(p, (unsigned char*)&config_version, 2)!=1;
             break;
          case -1:
             p -= 2;
-            if(mode==0)
+            if(mode==eConfigModeLoad)
                error = *((short*)p)!=total_size;
             else
                error = iflash_write(p, (unsigned char*)&total_size, 2)!=1;
             break;
          default:
             p -= config_data[i].size;
-            if(mode==0)
+            if(mode==eConfigModeLoad)
                memcpy(config_data[i].address_in_ram, (void*)p, config_data[i].size);
             else
                error = iflash_write(p, config_data[i].address_in_ram, config_data[i].size)!=1;
             break;
       }
    }
-   return error;
+   return error==0 ? eConfigResultOK : eConfigResultError;
 }

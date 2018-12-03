@@ -32,12 +32,11 @@ extern struct pt pt_m590e_smsparse,
 extern struct M590E_Data m590e_data;
 extern struct VSwitch_Data vswitch_data;
 
-volatile unsigned int wakeup_cause;
 struct Fifo fifo_command_parser, fifo_m590e_responses;
+struct Main_Data main_data;
 
 void main(void) {
    char *s, buf[32];
-   int t;
    unsigned int cause;
 
    _disable_irq();
@@ -49,12 +48,12 @@ void main(void) {
 
    PRESETCTRL = (1<<2 | 1<<3 | 1<<4 | 1<<7 | 1<<9 | 1<<10 | 1<<11 | 1<<24); //clear USART FRG, USART0, USART1, MRT, WKT, GPIO, flash controller, ADC reset
 
-   t = config(0); //load config
+   main_data.config_load_result = config(eConfigModeLoad); //load config
 
    ADC_Init(); //ADC pin P0.14
    DeepSleep_Init();
-   LED_Init(1);
-   SysTick_Init(1);
+   LED_Init(eLedModeOn);
+   Systick_Init(eSystickInitModeOn);
    UART0_Init();
    VSwitch_Init(); //virtual switch on pin P0.12
 
@@ -71,10 +70,10 @@ void main(void) {
    ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
    _enable_irq();
 
-   Init_Print(t);
+   Init_Print();
 
    while(1) {
-      while((cause=wakeup_cause)!=0) { //atomic interrupt safe read
+      while((cause=main_data.wakeup_cause)!=0) { //atomic interrupt safe read
          if(Fifo_Peek(&fifo_command_parser, &s)) {
             Handle_Command(s);
             Fifo_Remove(&fifo_command_parser);
@@ -84,7 +83,7 @@ void main(void) {
             mysprintf(buf, "vswitch duration: %d",vswitch_data.duration);
             output(buf, eOutputSubsystemVSwitch, eOutputLevelDebug);
             _disable_irq();
-            wakeup_cause &= (~(1<<eWakeupCauseVSwitchReleased));
+            main_data.wakeup_cause &= (~(1<<eWakeupCauseVSwitchReleased));
             _enable_irq();
          }
 
@@ -97,7 +96,7 @@ void main(void) {
             if(!m590e_data.ring_active) {
                if(PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse)) == 0) {
                   _disable_irq();
-                  wakeup_cause &= (~(1<<eWakeupCauseRingActive));
+                  main_data.wakeup_cause &= (~(1<<eWakeupCauseRingActive));
                   _enable_irq();
                }
             }
@@ -107,34 +106,36 @@ void main(void) {
             mysprintf(buf, "ring duration: %d", m590e_data.ring_duration);
             output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             _disable_irq();
-            wakeup_cause &= (~(1<<eWakeupCauseRingEnded));
+            main_data.wakeup_cause &= (~(1<<eWakeupCauseRingEnded));
             _enable_irq();
          }
 
          if((cause&(1<<eWakeupCauseSmsSending)) != 0) {
             if(PT_SCHEDULE(M590E_SMSSend(&pt_m590e_smssend)) == 0) {
                _disable_irq();
-               wakeup_cause &= (~(1<<eWakeupCauseSmsSending));
+               main_data.wakeup_cause &= (~(1<<eWakeupCauseSmsSending));
                _enable_irq();
             }
          }
          if((cause&(1<<eWakeupCauseTimer)) != 0) {
             if(PT_SCHEDULE(M590E_SMSPeriodic(&pt_m590e_smsperiodic)) == 0) {
                _disable_irq();
-               wakeup_cause &= (~(1<<eWakeupCauseTimer));
+               main_data.wakeup_cause &= (~(1<<eWakeupCauseTimer));
                _enable_irq();
             }
          }
       }
 
       _disable_irq();
-      if(wakeup_cause == 0 && !vswitch_data.active) {
+      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active) {
          _enable_irq();
-         SysTick_Stop();
+         M590E_Sleep_Enter();
+         Systick_Stop();
          LED_Off();
          _wfi();
          LED_On();
-         SysTick_Start();
+         Systick_Start();
+         M590E_Sleep_Exit();
       }
       _enable_irq();
    }
@@ -151,13 +152,13 @@ void init(void) {
 }
 
 void WKT_Set(int sec) {
-   if(sec) //t.b. bent 1 min
+   WKT_CTRL = (1<<0 | 1<<1 | 1<<2 | 0<<3); //clock source is low power clock (10kHz), clear alarm flag, clear the counter, clock source is internal
+   if(sec >= 60) //t.b. bent 1 min
       WKT_COUNT= sec*10000;
 }
 
 void WKT_Init(void) {
    DPDCTRL = (0<<0 | 1<<1 | 1<<2 | 0<<3 | 0<<4 | 0<<5); //WAKEUP pin hysteresis disabled, WAKEUP pin disabled, low-power oscillator enabled, low-power oscillator in DPD mode disabled, WKTCLKIN pin hysteresis disabled, WKTCLKIN disabled
-   WKT_CTRL = (1<<0 | 1<<1 | 1<<2 | 0<<3); //clock source is low power clock (10kHz), clear alarm flag, clear the counter, clock source is internal
    IPR3 = (IPR3 & (~(0x3<<30))) | (1<<30);
    ISER0 = (1<<15);
    WKT_Set(m590e_data.periodic_sms_interval);
@@ -180,7 +181,7 @@ void System_Reset(void) {
    while(1);
 }
 
-void Init_Print(int config_load_result) {
+void Init_Print(void) {
    char buf[64];
    unsigned char data[8];
    int i, j, l;
@@ -195,7 +196,7 @@ void Init_Print(int config_load_result) {
             break;
          case 2:
             l = mysprintf(buf, "%s", "config load: ");
-            mysprintf(buf+l, "%s", config_load_result==0?"ok":(config_load_result==1?"error":"unknown"));
+            mysprintf(buf+l, "%s", main_data.config_load_result==eConfigResultOK?"ok":"error");
             break;
          case 3:
             mysprintf(buf, "_flash_size: %u [0x%x - 0x%x]", (unsigned int)&_flash_size, (unsigned int)&_flash_start, (unsigned int)&_flash_end);
@@ -251,5 +252,5 @@ void WKT_IRQHandler(void) {
    WKT_CTRL |= (1<<1);
    if(m590e_data.periodic_sms_interval >= 60) //t.b. bent 1 min
       WKT_COUNT= m590e_data.periodic_sms_interval*10000;
-   wakeup_cause |= (1<<eWakeupCauseTimer);
+   main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
 }

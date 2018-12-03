@@ -16,16 +16,17 @@
 #include <string.h>
 
 extern char _flash_start, _flash_end, _ram_start, _ram_end, _heap_start;
-extern volatile unsigned int wakeup_cause;
 extern struct M590E_Data m590e_data;
+extern struct Main_Data main_data;
 extern struct Output_Data output_data;
-extern struct SysTick_Data systick_data;
+extern struct Systick_Data systick_data;
 
 void Handle_Command(char *pString) {
    char buf[256];
    unsigned char data[9];
    int i, j, l;
-   unsigned int t,params[12] = {0};
+   unsigned int t, params[12] = {0};
+   enum Config_Result config_save_result;
 
    mysprintf(buf, "<< %s >>", pString);
    output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
@@ -41,8 +42,8 @@ void Handle_Command(char *pString) {
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x426e: //config_save
-         t = config(1);
-         output(t==0 ? "ok" : "error",eOutputSubsystemSystem, eOutputLevelImportant);
+         config_save_result = config(eConfigModeSave);
+         output(config_save_result==eConfigResultOK ? "ok" : "error",eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x1804: //iflash_write
          if(params_count(params)>2 && params_count(params)<=6) {
@@ -66,7 +67,7 @@ void Handle_Command(char *pString) {
          }
          break;
       case 0x042e: //ip [init print]
-         Init_Print(-1);
+         Init_Print();
          break;
       case 0xaded: //om [output mask]
          if(params_count(params)==1) {
@@ -173,7 +174,8 @@ void Handle_Command(char *pString) {
                      strcpy(m590e_data.periodic_sms[i].commands[j], "\0");
             }
             else {
-               WKT_Set(m590e_data.periodic_sms_interval=params[2]);
+               m590e_data.periodic_sms_interval=params[2];
+               WKT_Set(m590e_data.periodic_sms_interval);
             }
          }
          else if(params_count(params)==2 && !params_integer(2, params) && strncmp(m590e_data.source_number, "", 1) != 0) {

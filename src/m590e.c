@@ -10,9 +10,9 @@
 #include "timer.h"
 #include <string.h>
 
-extern volatile unsigned int wakeup_cause;
 extern struct Fifo fifo_command_parser;
 extern struct Fifo fifo_m590e_responses;
+extern struct Main_Data main_data;
 
 struct pt pt_m590e_smsparse,
           pt_m590e_smssend,
@@ -22,11 +22,17 @@ struct pt pt_m590e_smsparse,
 struct M590E_Data m590e_data;
 
 void M590E_Init(void) {
-   //Ring on PIO0_17
+   //DTR (for sleep) on PIO0_17
    PINENABLE0 |= (1<<22); //ADC_9 disabled on PIO0_17
-   PIO0_17 = (1<<3 | 0<<5 | 0<<6 | 0<<10 | 0<<11 | 0<<13); //pd resistor, no hysteresis, input not inverted, no open-drain mode, input filter bypassed, clock IOCONCLKDIV0
-   DIR0 &= (~(1<<17)); //direction is input
-   PINTSEL1 = 17; //select PIO0_17 for pin interrupt
+   PIO0_17 = (0<<3 | 0<<5 | 0<<6 | 0<<10 | 0<<11 | 0<<13); //no pu/pd resistors, hysteresis disabled, input not inverted, no open-drain mode, bypass input filter, clock for input filter IOCONCLKDIV0
+   DIR0 |= (1<<17); //direction is output
+   SET0 = (1<<17); //set output high [DTR will also be high]
+
+   //Ring on PIO0_13
+   PINENABLE0 |= (1<<23); //ADC_10 disabled on PIO0_13
+   PIO0_13 = (0<<3 | 0<<5 | 0<<6 | 0<<10 | 0<<11 | 0<<13); // no pu/pd resistor, no hysteresis, input not inverted, no open-drain mode, input filter bypassed, clock IOCONCLKDIV0
+   DIR0 &= (~(1<<13)); //direction is input
+   PINTSEL1 = 13; //select PIO0_13 for pin interrupt
    ISEL &= (~(1<<1)); //edge sensitive interrupt mode for PINTSEL1
    IST = (1<<1); //clear detected edges
    CIENR = (1<<1); //disable rising edge interrupt
@@ -40,14 +46,24 @@ void M590E_Init(void) {
    m590e_data.mutex = 1;
 }
 
+
 int Ring_Active(void) {
-   return ((PIN0>>17)&1) == 0;
+   return ((PIN0>>13)&1) == 0;
+}
+void M590E_Sleep_Enter(void) {
+   M590E_Send_Blocking("AT+ENPWRSAVE=1\r", 15, 1, 2000);
+   CLR0 = (1<<17);
+}
+
+void M590E_Sleep_Exit(void) {
+   SET0 = (1<<17);
+   M590E_Send_Blocking("AT+ENPWRSAVE=0\r", 15, 1, 2000);
 }
 
 void PININT1_IRQHandler(void) {
    CIENF = (1<<1); //disable falling edge interrupt
    FALL = (1<<1); //clear detected falling edge
-   wakeup_cause |= (1<<eWakeupCauseRingActive);
+   main_data.wakeup_cause |= (1<<eWakeupCauseRingActive);
    if(m590e_data.ring_active == 0) {
       m590e_data.ring_active = 1;
       m590e_data.ring_delay = 0;

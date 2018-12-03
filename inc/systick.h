@@ -1,12 +1,17 @@
 #ifndef __SYSTICK_H__
 #define __SYSTICK_H__
 
-struct SysTick_Data {
+struct Systick_Data {
    unsigned int millis;
 };
 
-void SysTick_Init(int);
-void SysTick_Start(void);
-void SysTick_Stop(void);
+enum Systick_InitMode {
+   eSystickInitModeOff  = 0,
+   eSystickInitModeOn   = 1
+};
+
+void Systick_Init(enum Systick_InitMode);
+void Systick_Start(void);
+void Systick_Stop(void);
 
 #endif

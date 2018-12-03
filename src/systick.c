@@ -5,30 +5,30 @@
 #include "vswitch.h"
 #include "lpc824.h"
 
-extern volatile unsigned int wakeup_cause;
 extern struct M590E_Data m590e_data;
+extern struct Main_Data main_data;
 extern struct VSwitch_Data vswitch_data;
 
-struct SysTick_Data systick_data;
+struct Systick_Data systick_data;
 
-void SysTick_Init(int start) {
+void Systick_Init(enum Systick_InitMode mode) {
    SYST_CSR = (0<<0 | 0<<1); //counter disabled, interrupt disabled
    SHPR3 = (SHPR3 & (~(0x3u<<30))) | (1u<<30); //set the priority
-   if(start) SysTick_Start();
+   if(mode == eSystickInitModeOn) Systick_Start();
 }
 
-void SysTick_Start(void) {
+void Systick_Start(void) {
    systick_data.millis = 0;
    SYST_RVR = SYSTEM_CLOCK/1000 -1; //1ms
    SYST_CVR = 0; //writing any value clear counter and the COUNTFLAG bit
    SYST_CSR = (1<<0 | 1<<1 | 1<<2); //enable counter, enable interrupt, clock source is system clock
 }
 
-void SysTick_Stop(void) {
+void Systick_Stop(void) {
    SYST_CSR = (0<<0 | 0<<1); //disable counter, disable interrupt
 }
 
-void SysTick_Handler(void) {
+void Systick_Handler(void) {
    systick_data.millis += 1;
    if(vswitch_data.active) {
       vswitch_data.duration += 1;
@@ -41,7 +41,7 @@ void SysTick_Handler(void) {
          vswitch_data.duration -= 500;
          RISE = (1<<0);
          SIENR = (1<<0);
-         wakeup_cause |= (1<<eWakeupCauseVSwitchReleased);
+         main_data.wakeup_cause |= (1<<eWakeupCauseVSwitchReleased);
       }
    }
    if(m590e_data.ring_active) {
@@ -55,7 +55,7 @@ void SysTick_Handler(void) {
          m590e_data.ring_duration -= 3000;
          FALL = (1<<1);
          SIENF = (1<<1);
-         wakeup_cause |= (1<<eWakeupCauseRingEnded);
+         main_data.wakeup_cause |= (1<<eWakeupCauseRingEnded);
       }
    }
 }
