@@ -26,9 +26,7 @@ extern char _data_start_lma, _data_start, _data_end, _bss_start, _bss_end;
 extern char _flash_start, _flash_end, _ram_start, _ram_end;
 extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _data_size, _bss_size, _stack_size, _heap_size;
 
-extern struct pt pt_m590e_smsparse,
-                 pt_m590e_smssend,
-                 pt_m590e_smsperiodic;
+extern struct pt pt_m590e_smsparse, pt_m590e_smssend, pt_m590e_smsperiodic;
 extern struct M590E_Data m590e_data;
 extern struct VSwitch_Data vswitch_data;
 
@@ -67,10 +65,10 @@ void main(void) {
    PT_INIT(&pt_m590e_smssend);
    PT_INIT(&pt_m590e_smsperiodic);
 
+   Init_Print();
+
    ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
    _enable_irq();
-
-   Init_Print();
 
    while(1) {
       while((cause=main_data.wakeup_cause)!=0) { //atomic interrupt safe read
@@ -127,7 +125,7 @@ void main(void) {
       }
 
       _disable_irq();
-      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active) {
+      if(main_data.wakeup_cause==0) {
          _enable_irq();
          M590E_Sleep_Enter();
          Systick_Stop();
@@ -151,6 +149,13 @@ void init(void) {
       *dst = 0;
 }
 
+void System_Reset(void) {
+   _dsb();
+   AIRCR = (AIRCR & (~(1<<1 | 1<<2 | 0xffffu<<16))) | (1<<2 | 0x5fau<<16);
+   _dsb();
+   while(1);
+}
+
 void WKT_Set(int sec) {
    WKT_CTRL = (1<<0 | 1<<1 | 1<<2 | 0<<3); //clock source is low power clock (10kHz), clear alarm flag, clear the counter, clock source is internal
    if(sec >= 60) //t.b. bent 1 min
@@ -164,6 +169,13 @@ void WKT_Init(void) {
    WKT_Set(m590e_data.periodic_sms_interval);
 }
 
+void WKT_IRQHandler(void) {
+   WKT_CTRL |= (1<<1);
+   if(m590e_data.periodic_sms_interval >= 60) //t.b. bent 1 min
+      WKT_COUNT= m590e_data.periodic_sms_interval*10000;
+   main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
+}
+
 void DeepSleep_Init(void) {
    PCON = (PCON & (~(0x7<<0))) | (1<<0); //deep-sleep mode
    PDSLEEPCFG |= (1<<3 | 1<<6); //BOD for deep-sleep powered down, watchdog oscillator for deep-sleep powered down
@@ -172,13 +184,6 @@ void DeepSleep_Init(void) {
    STARTERP1 = (1<<15); //self-wake-up timer interrupt wake-up
    SCR = (SCR&(~(0x1<<1 | 0x1<<2))) | (0<<1 | 1<<2); //do not sleep when returning to thread mode, deep sleep is processor's low power mode
    WKT_Init();
-}
-
-void System_Reset(void) {
-   _dsb();
-   AIRCR = (AIRCR & (~(1<<1 | 1<<2 | 0xffffu<<16))) | (1<<2 | 0x5fau<<16);
-   _dsb();
-   while(1);
 }
 
 void Init_Print(void) {
@@ -246,11 +251,4 @@ void Init_Print(void) {
       }
       output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
    }
-}
-
-void WKT_IRQHandler(void) {
-   WKT_CTRL |= (1<<1);
-   if(m590e_data.periodic_sms_interval >= 60) //t.b. bent 1 min
-      WKT_COUNT= m590e_data.periodic_sms_interval*10000;
-   main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
 }

@@ -20,7 +20,7 @@ enum Wakeup_Cause {
 };
 
 void System_Reset(void);
-void Init_Print(void);
 void WKT_Set(int);
+void Init_Print(void);
 
 #endif

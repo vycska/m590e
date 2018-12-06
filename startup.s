@@ -4,7 +4,7 @@
 
 .global Reset_Handler
 
-.weak NMI_Handler,HardFault_Handler,SVC_Handler,PendSV_Handler,SysTick_Handler,SPI0_IRQHandler,SPI1_IRQHandler,UART0_IRQHandler,UART1_IRQHandler,UART2_IRQHandler,I2C1_IRQHandler,I2C0_IRQHandler,SCT_IRQHandler,MRT_IRQHandler,CMP_IRQHandler,WDT_IRQHandler,BOD_IRQHandler,FLASH_IRQHandler,WKT_IRQHandler,ADC_SEQA_IRQHandler,ADC_SEQB_IRQHandler,ADC_THCMP_IRQHandler,ADC_OVR_IRQHandler,DMA_IRQHandler,I2C2_IRQHandler,I2C3_IRQHandler,PININT0_IRQHandler,PININT1_IRQHandler,PININT2_IRQHandler,PININT3_IRQHandler,PININT4_IRQHandler,PININT5_IRQHandler,PININT6_IRQHandler,PININT7_IRQHandler
+.weak NMI_Handler,HardFault_Handler,SVC_Handler,PendSV_Handler,Systick_Handler,SPI0_IRQHandler,SPI1_IRQHandler,UART0_IRQHandler,UART1_IRQHandler,UART2_IRQHandler,I2C1_IRQHandler,I2C0_IRQHandler,SCT_IRQHandler,MRT_IRQHandler,CMP_IRQHandler,WDT_IRQHandler,BOD_IRQHandler,FLASH_IRQHandler,WKT_IRQHandler,ADC_SEQA_IRQHandler,ADC_SEQB_IRQHandler,ADC_THCMP_IRQHandler,ADC_OVR_IRQHandler,DMA_IRQHandler,I2C2_IRQHandler,I2C3_IRQHandler,PININT0_IRQHandler,PININT1_IRQHandler,PININT2_IRQHandler,PININT3_IRQHandler,PININT4_IRQHandler,PININT5_IRQHandler,PININT6_IRQHandler,PININT7_IRQHandler
 
 .section .intvecs, "a"
 .word _stack_end
@@ -22,7 +22,7 @@
 .word 0
 .word 0
 .word PendSV_Handler
-.word SysTick_Handler
+.word Systick_Handler
 @ vendor specific interrupts
 .word SPI0_IRQHandler		@ irq 0, exception 16, offset 0x40
 .word SPI1_IRQHandler
@@ -74,7 +74,7 @@ SVC_Handler:
 .thumb_func
 PendSV_Handler:
 .thumb_func
-SysTick_Handler:
+Systick_Handler:
 .thumb_func
 SPI0_IRQHandler:
 .thumb_func
