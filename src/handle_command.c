@@ -1,4 +1,5 @@
 #include "handle_command.h"
+#include "adc.h"
 #include "config.h"
 #include "ds18b20.h"
 #include "dump.h"
@@ -121,10 +122,7 @@ void Handle_Command(char *pString) {
          break;
       case 0xa93e: //b [battery]
          if(params_count(params)==1) {
-            float v;
-            ADCSEQA_CTRL |= (1<<26); //start conversion on adc sequence A
-            while((ADCDAT2&(1u<<31))==0);
-            v = ((ADCDAT2>>4)&0xfff)/4095.0f*3.3f * 2;
+            float v = ADC_Get()/4095.0f*3.3f * 2; //*2 del itampos pasidalinimo tarp dvieju vienodu [3.3k atrodo] varzu
             mysprintf(buf, "%f2 V", (char*)&v);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
