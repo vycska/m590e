@@ -19,7 +19,7 @@ struct Periodic_SMS {
 struct M590E_Data {
    char response[3][64],
         source_number[MAX_SRC_SIZE];
-   int mutex;
+   int mutex, ready;
    volatile int ring_active, ring_delay, ring_duration;
    int periodic_sms_interval;
    struct Periodic_SMS periodic_sms[PERIODIC_SMS_RECIPIENTS];
@@ -31,7 +31,7 @@ void M590E_Sleep_Enter(void);
 void M590E_Sleep_Exit(void);
 void M590E_Send_Blocking(char *msg, int len, int k, int delay);
 PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay));
-PT_THREAD(M590E_SMSInit(struct pt *pt, int *ok));
+PT_THREAD(M590E_SMSInit(struct pt *pt));
 PT_THREAD(M590E_SMSParse(struct pt *pt));
 PT_THREAD(M590E_SMSSend(struct pt *pt));
 PT_THREAD(M590E_SMSPeriodic(struct pt *pt));

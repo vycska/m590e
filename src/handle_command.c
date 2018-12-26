@@ -144,10 +144,7 @@ void Handle_Command(char *pString) {
             else
                l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
          }
-         M590E_Send_Blocking(buf, l, 3, 5000);
-         for(i=0; i<3; i++)
-            if(m590e_data.response[i][0]!=0)
-               output(m590e_data.response[i], eOutputSubsystemSystem, eOutputLevelImportant);
+         M590E_Send_Blocking(buf, l, 10, 5000);
          break;
       case 0xa4be: //p [periodic sms]
          if(params_count(params)==1) {

@@ -111,8 +111,3 @@ void UART1_IRQHandler(void) {
       }
    }
 }
-
-int UART1_Get(unsigned char **s) {
-   *s = (unsigned char*)uart1_data.s;
-   return uart1_data.i;
-}

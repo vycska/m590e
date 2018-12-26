@@ -26,7 +26,7 @@ extern char _data_start_lma, _data_start, _data_end, _bss_start, _bss_end;
 extern char _flash_start, _flash_end, _ram_start, _ram_end;
 extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _data_size, _bss_size, _stack_size, _heap_size;
 
-extern struct pt pt_m590e_smsparse, pt_m590e_smssend, pt_m590e_smsperiodic;
+extern struct pt pt_m590e_smsinit, pt_m590e_smsparse, pt_m590e_smssend, pt_m590e_smsperiodic;
 extern struct M590E_Data m590e_data;
 extern struct VSwitch_Data vswitch_data;
 
@@ -36,6 +36,7 @@ struct Main_Data main_data;
 void main(void) {
    char *s, buf[32];
    unsigned int cause;
+   struct timer timer;
 
    _disable_irq();
 
@@ -61,6 +62,7 @@ void main(void) {
    Fifo_Init(&fifo_command_parser);
    Fifo_Init(&fifo_m590e_responses);
 
+   PT_INIT(&pt_m590e_smsinit);
    PT_INIT(&pt_m590e_smsparse);
    PT_INIT(&pt_m590e_smssend);
    PT_INIT(&pt_m590e_smsperiodic);
@@ -71,10 +73,22 @@ void main(void) {
    _enable_irq();
 
    while(1) {
-      while((cause=main_data.wakeup_cause)!=0) { //atomic interrupt safe read
-         if(Fifo_Peek(&fifo_command_parser, &s)) {
+      while((cause=main_data.wakeup_cause) != 0) { //atomic interrupt safe read
+         while(Fifo_Peek(&fifo_command_parser, &s)) {
             Handle_Command(s);
             Fifo_Remove(&fifo_command_parser);
+         }
+
+         while(((cause&(1<<eWakeupCauseRingActive))==0 || m590e_data.ring_active) && (cause&(1<<eWakeupCauseSmsSending))==0 && (cause&(1<<eWakeupCauseM590EInit))==0 && Fifo_Peek(&fifo_m590e_responses, &s)) {
+            output(s, eOutputSubsystemM590E, eOutputLevelNormal);
+            if(strcmp(s, "MODEM:STARTUP") == 0) {
+               m590e_data.ready = 0;
+            }
+            if(strcmp(s, "+PBREADY") == 0) {
+               m590e_data.ready = 0;
+               main_data.wakeup_cause |= (1<<eWakeupCauseM590EInit);
+            }
+            Fifo_Remove(&fifo_m590e_responses);
          }
 
          if((cause&(1<<eWakeupCauseVSwitchReleased)) != 0) {
@@ -85,9 +99,19 @@ void main(void) {
             _enable_irq();
          }
 
-         if((cause&(1<<eWakeupCauseRingActive))==0 && (cause&(1<<eWakeupCauseSmsSending))==0 && Fifo_Peek(&fifo_m590e_responses, &s)) {
-            output(s, eOutputSubsystemSystem, eOutputLevelNormal);
-            Fifo_Remove(&fifo_m590e_responses);
+         if((cause&(1<<eWakeupCauseM590EWakeup)) != 0) {
+            M590E_Sleep_Exit();
+            _disable_irq();
+            main_data.wakeup_cause &= (~(1<<eWakeupCauseM590EWakeup));
+            _enable_irq();
+         }
+
+         if((cause&(1<<eWakeupCauseM590EInit)) != 0) {
+            if(PT_SCHEDULE(M590E_SMSInit(&pt_m590e_smsinit)) == 0) {
+               _disable_irq();
+               main_data.wakeup_cause &= (~(1<<eWakeupCauseM590EInit));
+               _enable_irq();
+            }
          }
 
          if((cause&(1<<eWakeupCauseRingActive)) != 0) {
@@ -115,6 +139,7 @@ void main(void) {
                _enable_irq();
             }
          }
+
          if((cause&(1<<eWakeupCauseTimer)) != 0) {
             if(PT_SCHEDULE(M590E_SMSPeriodic(&pt_m590e_smsperiodic)) == 0) {
                _disable_irq();
@@ -125,7 +150,7 @@ void main(void) {
       }
 
       _disable_irq();
-      if(main_data.wakeup_cause==0) {
+      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active) {
          _enable_irq();
          M590E_Sleep_Enter();
          Systick_Stop();
@@ -133,7 +158,10 @@ void main(void) {
          _wfi();
          LED_On();
          Systick_Start();
-         M590E_Sleep_Exit();
+         ADC_Calibrate();
+         timer_set(&timer, 1000);
+         while(!timer_expired(&timer));
+         main_data.wakeup_cause |= (1<<eWakeupCauseM590EWakeup);
       }
       _enable_irq();
    }

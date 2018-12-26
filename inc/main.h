@@ -16,7 +16,9 @@ enum Wakeup_Cause {
    eWakeupCauseRingActive        = 2,
    eWakeupCauseRingEnded         = 3,
    eWakeupCauseSmsSending        = 4,
-   eWakeupCauseTimer             = 5
+   eWakeupCauseTimer             = 5,
+   eWakeupCauseM590EInit         = 6,
+   eWakeupCauseM590EWakeup       = 7
 };
 
 void System_Reset(void);
