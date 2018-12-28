@@ -55,7 +55,7 @@ int dec2str(long long int n, char *s) {
    return i + 1;
 }
 
-int float2str(float d, int p, char *s) {
+int double2str(double d, int p, char *s) {
    int i, j, n;
 
    for(j = i = ((d < 0.0) ? (d = -d, s[0] = '-', 1) : 0), n = (int)d; n > 0 || j == i; (s[j++] = '0' + n % 10), n /= 10);
@@ -68,7 +68,7 @@ int mysprintf(char *buf, const char *format, ...) {
    int i, j, k, d;
    unsigned int u;
    long long int l;
-   float f;
+   double f;
    va_list va;
 
    va_start(va, format);
@@ -100,8 +100,8 @@ int mysprintf(char *buf, const char *format, ...) {
                k = dec2hex2str(u, &buf[j]);
                break;
             case 'f':
-               f = *((float*)va_arg(va,char*));
-               k = float2str(f, format[++i] - '0', &buf[j]);
+               f = *((double*)va_arg(va,char*));
+               k = double2str(f, format[++i] - '0', &buf[j]);
                break;
             case 'c':
                buf[j] = va_arg(va, int);

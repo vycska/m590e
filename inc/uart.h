@@ -3,8 +3,8 @@
 
 #define UART0_BAUDRATE (38400)
 #define UART1_BAUDRATE (38400)
-#define UART0_IN_MAX 128
-#define UART1_IN_MAX 288
+#define UART0_IN_MAX 80 //FIFO_ITEM_SIZE irgi 80
+#define UART1_IN_MAX 80 //FIFO_ITEM_SIZE irgi 80
 
 enum UART0ReceivingMode {
    eUART0ReceivingModeCommands = 0,

@@ -91,21 +91,25 @@ void UART1_Transmit(char *s,int k) {
 
 void UART1_IRQHandler(void) {
    unsigned char c;
+   int ready_to_fifo=0;
+
    if((USART1STAT>>0)&1) { //RXRDY
       c = USART1RXDAT&0xff;
       dump_put(c);
       if(c=='>' && uart1_data.i==0) {
-         uart1_data.s[0] = c;
-         uart1_data.s[1] = '\0';
-         Fifo_Put(&fifo_m590e_responses, uart1_data.s);
+         uart1_data.s[uart1_data.i++] = c;
+         ready_to_fifo = 1;
       }
       else if(isprint(c) && !(c==' ' && uart1_data.i==0)) {
          uart1_data.s[uart1_data.i++] = c;
-         if(uart1_data.i >= UART1_IN_MAX)
-            uart1_data.i = 0;
+         if(uart1_data.i == UART1_IN_MAX-1)
+            ready_to_fifo = 1;
       }
       else if(uart1_data.i != 0) {
-         uart1_data.s[uart1_data.i] = 0;
+         ready_to_fifo = 1;
+      }
+      if(ready_to_fifo) {
+         uart1_data.s[uart1_data.i] = '\0';
          uart1_data.i = 0;
          Fifo_Put(&fifo_m590e_responses, uart1_data.s);
       }

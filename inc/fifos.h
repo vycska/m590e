@@ -4,11 +4,11 @@
 #include "m590e.h"
 
 #define FIFO_ITEMS 8
-#define FIFO_ITEM_SIZE 64
+#define FIFO_ITEM_SIZE 80
 
 #define FIFO_SMS_ITEMS 24
 #define FIFO_SMS_SRC_SIZE MAX_SRC_SIZE
-#define FIFO_SMS_MSG_SIZE 48
+#define FIFO_SMS_MSG_SIZE 32
 
 struct Fifo {
    volatile char buffer[FIFO_ITEMS][FIFO_ITEM_SIZE];

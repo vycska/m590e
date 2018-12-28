@@ -8,6 +8,6 @@ void DS18B20_Init(void);
 int DS18B20_ReadROM(unsigned char *);
 void DS18B20_ConvertTAll(void);
 int DS18B20_ReadScratchpad(unsigned char *, unsigned char *);
-float DS18B20_GetTemperature(unsigned char *);
+double DS18B20_GetTemperature(unsigned char *);
 
 #endif

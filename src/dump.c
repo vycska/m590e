@@ -3,7 +3,7 @@
 #include "utils.h"
 #include <ctype.h>
 
-#define DUMP_SIZE 200
+#define DUMP_SIZE 100
 
 struct Dump {
    unsigned char data[DUMP_SIZE];

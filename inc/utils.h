@@ -11,7 +11,7 @@ unsigned short crc16(unsigned char *, unsigned char);
 void streverse(char *, int);
 int dec2hex2str(unsigned long long int, char *);
 int dec2str(long long int, char *);
-int float2str(float, int, char *);
+int double2str(double, int, char *);
 int mysprintf(char *, const char *, ...);
 long long int power(int, int);
 unsigned char reflect_byte(unsigned char);

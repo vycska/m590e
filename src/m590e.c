@@ -78,16 +78,17 @@ void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
    int i;
    struct timer timer;
    UART1_Transmit(msg, len);
-   for(i=0; i<ABS(k); i++) {
+   for(i=0; i<ABS(k) && i<MAX_RESPONSES; i++) {
       timer_set(&timer, delay);
       while(!(Fifo_Peek(&fifo_m590e_responses, &s)==1 || timer_expired(&timer)));
       if(s != 0) {
-         strcpy(m590e_data.response[i], s);
+         strncpy(m590e_data.response[i], s, MAX_RESPONSE_SIZE-1);
+         m590e_data.response[i][MAX_RESPONSE_SIZE-1] = '\0';
          Fifo_Remove(&fifo_m590e_responses);
          if(k>0) output(m590e_data.response[i], eOutputSubsystemSystem, eOutputLevelImportant);
       }
       else {
-         while(i<ABS(k)) strcpy(m590e_data.response[i++],"\0");
+         while(i<ABS(k) && i<MAX_RESPONSES) strcpy(m590e_data.response[i++],"\0");
       }
    }
 }
@@ -99,15 +100,16 @@ PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay)) {
 
    PT_BEGIN(pt);
    UART1_Transmit(msg, len);
-   for(i=0; i<k; i++) {
+   for(i=0; i<k && i<MAX_RESPONSES; i++) {
       timer_set(&timer, delay);
       PT_WAIT_UNTIL(pt, Fifo_Peek(&fifo_m590e_responses, &s)==1 || timer_expired(&timer));
       if(s!=0) {
-         strcpy(m590e_data.response[i], s);
+         strncpy(m590e_data.response[i], s, MAX_RESPONSE_SIZE-1);
+         m590e_data.response[i][MAX_RESPONSE_SIZE-1] = '\0';
          Fifo_Remove(&fifo_m590e_responses);
       }
       else {
-         while(i<k) strcpy(m590e_data.response[i++],"\0");
+         while(i<k && i<MAX_RESPONSES) strcpy(m590e_data.response[i++],"\0");
       }
    }
    PT_END(pt);
@@ -115,7 +117,7 @@ PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay)) {
 
 PT_THREAD(M590E_SMSInit(struct pt *pt)) {
    static char buf[32];
-   static int l, status;
+   static int l, status, tries;
    static struct timer timer;
 
    PT_BEGIN(pt);
@@ -132,7 +134,14 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
          case 1:
             timer_set(&timer, 5000);
             PT_WAIT_UNTIL(pt, timer_expired(&timer));
-            status = 2;
+            tries += 1;
+            if(tries > MAX_INIT_TRIES) {
+               status = 0;
+               tries = 0;
+            }
+            else {
+               status = 2;
+            }
             break;
          case 2:
             l = mysprintf(buf, "ATE0\r");
@@ -177,11 +186,26 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
             }
             break;
          case 5:
+            l = mysprintf(buf, "AT+CPMS=\"SM\",\"SM\",\"SM\"\r");
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+            if(strcmp(m590e_data.response[1],"OK")==0) {
+               status = 6;
+               strcpy(buf+l-1, " ok");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            else {
+               status = 1;
+               strcpy(buf+l-1, " error");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            break;
+         case 6:
             l = mysprintf(buf, "AT+CNMI=2,1,2,0,0\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
             if(strcmp(m590e_data.response[0],"OK")==0) {
                m590e_data.ready = 1;
                status = 0;
+               tries = 0;
                strcpy(buf+l-1, " ok");
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             }

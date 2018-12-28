@@ -122,7 +122,7 @@ void Handle_Command(char *pString) {
          break;
       case 0xa93e: //b [battery]
          if(params_count(params)==1) {
-            float v = ADC_Get()/4095.0f*3.3f * 2; //*2 del itampos pasidalinimo tarp dvieju vienodu [3.3k atrodo] varzu
+            double v = ADC_Get()/4095.0*3.3 * 2; //*2 del itampos pasidalinimo tarp dvieju vienodu [3.3k atrodo] varzu
             mysprintf(buf, "%f2 V", (char*)&v);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
@@ -131,9 +131,9 @@ void Handle_Command(char *pString) {
          DS18B20_ConvertTAll();
          MRT0_Delay(750*1000); //conversion time
          if(DS18B20_ReadScratchpad(0,data)==DS18B20_OK) {
-            float v;
+            double v;
             v = DS18B20_GetTemperature(data);
-            mysprintf(buf, "%f2 C",(char*)&v);
+            mysprintf(buf, "%f1 C",(char*)&v);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
          break;
@@ -144,7 +144,7 @@ void Handle_Command(char *pString) {
             else
                l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
          }
-         M590E_Send_Blocking(buf, l, 10, 5000);
+         M590E_Send_Blocking(buf, l, 9, 5000);
          break;
       case 0xa4be: //p [periodic sms]
          if(params_count(params)==1) {

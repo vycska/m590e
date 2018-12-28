@@ -80,7 +80,7 @@ void main(void) {
          }
 
          while(((cause&(1<<eWakeupCauseRingActive))==0 || m590e_data.ring_active) && (cause&(1<<eWakeupCauseSmsSending))==0 && (cause&(1<<eWakeupCauseM590EInit))==0 && Fifo_Peek(&fifo_m590e_responses, &s)) {
-            output(s, eOutputSubsystemM590E, eOutputLevelNormal);
+            output(s, eOutputSubsystemM590E, eOutputLevelImportant);
             if(strcmp(s, "MODEM:STARTUP") == 0) {
                m590e_data.ready = 0;
             }
@@ -218,7 +218,7 @@ void Init_Print(void) {
    char buf[64];
    unsigned char data[8];
    int i, j, l;
-   float used_value;
+   double used_value;
    for(i=0; i<=14; i++) {
       switch(i) {
          case 0:
@@ -260,12 +260,12 @@ void Init_Print(void) {
             break;
          case 12:
             l = (int)&_intvecs_size + (int)&_text_size + (int)&_rodata_size + (int)&_data_size;
-            used_value = 100.0f * (float)l / (int)&_flash_size;
+            used_value = 100.0 * l / (int)&_flash_size;
             mysprintf(buf, "flash used: %d [%f1%%]", l, (char*)&used_value);
             break;
          case 13:
             l = (int)&_stack_size + (int)&_data_size + (int)&_bss_size; //heap'o nepridedu, nes jam priskiriu siaip vietos tiek kiek lieka
-            used_value = 100.0f * (float)l / (int)&_ram_size;
+            used_value = 100.0 * l / (int)&_ram_size;
             mysprintf(buf, "ram used: %d [%f1%%]", l, (char*)&used_value);
             break;
          case 14: //DS18B20
