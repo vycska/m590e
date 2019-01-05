@@ -1,10 +1,12 @@
 #include "main.h"
 #include "adc.h"
+#include "boozer.h"
 #include "clocks.h"
 #include "config.h"
 #include "ds18b20.h"
 #include "fifos.h"
 #include "handle_command.h"
+#include "hcsr501.h"
 #include "iap.h"
 #include "led.h"
 #include "m590e.h"
@@ -26,7 +28,9 @@ extern char _data_start_lma, _data_start, _data_end, _bss_start, _bss_end;
 extern char _flash_start, _flash_end, _ram_start, _ram_end;
 extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _data_size, _bss_size, _stack_size, _heap_size;
 
-extern struct pt pt_m590e_smsinit, pt_m590e_smsparse, pt_m590e_smssend, pt_m590e_smsperiodic;
+extern struct pt pt_m590e_smsinit, pt_m590e_smsparse, pt_m590e_smssend, pt_m590e_smsperiodic, pt_m590e_smspir;
+extern struct Boozer_Data boozer_data;
+extern struct HCSR501_Data hcsr501_data;
 extern struct M590E_Data m590e_data;
 extern struct VSwitch_Data vswitch_data;
 
@@ -56,7 +60,9 @@ void main(void) {
    UART0_Init();
    VSwitch_Init(); //virtual switch on pin P0.12
 
+   Boozer_Init(); //P0.5
    DS18B20_Init(); //this initializes one-wire pin P0.9
+   HCSR501_Init(); //P0.8
    M590E_Init();
 
    Fifo_Init(&fifo_command_parser);
@@ -66,6 +72,7 @@ void main(void) {
    PT_INIT(&pt_m590e_smsparse);
    PT_INIT(&pt_m590e_smssend);
    PT_INIT(&pt_m590e_smsperiodic);
+   PT_INIT(&pt_m590e_smspir);
 
    Init_Print();
 
@@ -140,6 +147,24 @@ void main(void) {
             }
          }
 
+         if((cause&(1<<eWakeupCauseHCSR501Start)) != 0) {
+            if(PT_SCHEDULE(M590E_SMSPIR(&pt_m590e_smsparse)) == 0) {
+               _disable_irq();
+               main_data.wakeup_cause &= (~(1<<eWakeupCauseHCSR501Start));
+               _enable_irq();
+            }
+         }
+
+
+         if((cause&(1<<eWakeupCauseHCSR501End)) != 0) {
+            mysprintf(buf, "hcsr501 duration: %d",hcsr501_data.duration);
+            output(buf, eOutputSubsystemHCSR501, eOutputLevelDebug);
+            _disable_irq();
+            main_data.wakeup_cause &= (~(1<<eWakeupCauseHCSR501End));
+            _enable_irq();
+
+         }
+
          if((cause&(1<<eWakeupCauseTimer)) != 0) {
             if(PT_SCHEDULE(M590E_SMSPeriodic(&pt_m590e_smsperiodic)) == 0) {
                _disable_irq();
@@ -150,15 +175,17 @@ void main(void) {
       }
 
       _disable_irq();
-      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active) {
+      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active && !boozer_data.active && !hcsr501_data.active) {
          _enable_irq();
          M590E_Sleep_Enter();
          Systick_Stop();
          LED_Off();
+         Boozer_Off(); //jeigu kartais per si pasiruosimo sleep'inti laikotarpi isijungtu boozer'is
          _wfi();
          LED_On();
          Systick_Start();
          ADC_Calibrate();
+         //krc cia nutariau padaryti delay'u, nes gauto sms atveju ateina ir pranesimas, kuri as noriu atspausdinti ir po to jau prikelti modema
          timer_set(&timer, 1000);
          while(!timer_expired(&timer));
          main_data.wakeup_cause |= (1<<eWakeupCauseM590EWakeup);
@@ -208,7 +235,7 @@ void DeepSleep_Init(void) {
    PCON = (PCON & (~(0x7<<0))) | (1<<0); //deep-sleep mode
    PDSLEEPCFG |= (1<<3 | 1<<6); //BOD for deep-sleep powered down, watchdog oscillator for deep-sleep powered down
    PDAWAKECFG = (0<<0 | 0<<1 | 0<<2 | 1<<3 | 0<<4 | 1<<5 | 1<<6 | 1<<7 | 0xd<<8 | 0x6<<12 | 1<<15); //power configuration after wake up: IRC oscillator output powered, IRC oscillator power-down powered, flash powered, BOD powered down, ADC powered, crystal oscillator powered down, watchdog oscillator powered down, system PLL powered down, ACMP powered down
-   STARTERP0 = (1<<0 | 1<<1); //GPIO pint interrupt 0 and 1 wake-up enabled
+   STARTERP0 = (1<<0 | 1<<1 | 1<<2); //GPIO pin interrupt 0, 1 and 2 wake-up enabled
    STARTERP1 = (1<<15); //self-wake-up timer interrupt wake-up
    SCR = (SCR&(~(0x1<<1 | 0x1<<2))) | (0<<1 | 1<<2); //do not sleep when returning to thread mode, deep sleep is processor's low power mode
    WKT_Init();

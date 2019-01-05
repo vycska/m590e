@@ -1,4 +1,5 @@
 #include "m590e.h"
+#include "boozer.h"
 #include "fifos.h"
 #include "main.h"
 #include "mrt.h"
@@ -8,15 +9,19 @@
 #include "lpc824.h"
 #include "pt.h"
 #include "timer.h"
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 extern struct Fifo fifo_command_parser;
 extern struct Fifo fifo_m590e_responses;
+extern struct Boozer_Data boozer_data;
 extern struct Main_Data main_data;
 
 struct pt pt_m590e_smsparse,
           pt_m590e_smssend,
           pt_m590e_smsperiodic,
+          pt_m590e_smspir,
           pt_m590e_smsinit,
           pt_m590e_send;
 struct M590E_Data m590e_data;
@@ -52,13 +57,13 @@ int Ring_Active(void) {
    return ((PIN0>>13)&1) == 0;
 }
 void M590E_Sleep_Enter(void) {
-   M590E_Send_Blocking("AT+ENPWRSAVE=1\r", 15, -1, 10000);
+   M590E_Send_Blocking("AT+ENPWRSAVE=1\r", 15, -1, 5000);
    CLR0 = (1<<17);
 }
 
 void M590E_Sleep_Exit(void) {
    SET0 = (1<<17);
-   M590E_Send_Blocking("AT+ENPWRSAVE=0\r", 15, -1, 10000);
+   M590E_Send_Blocking("AT+ENPWRSAVE=0\r", 15, -1, 5000);
 }
 
 void PININT1_IRQHandler(void) {
@@ -66,10 +71,81 @@ void PININT1_IRQHandler(void) {
    FALL = (1<<1); //clear detected falling edge
    main_data.wakeup_cause |= (1<<eWakeupCauseRingActive);
    if(m590e_data.ring_active == 0) {
+      if(!boozer_data.active) Boozer_On(200);
       m590e_data.ring_active = 1;
       m590e_data.ring_delay = 0;
       m590e_data.ring_duration = 0;
    }
+}
+
+int M590E_Get_UnixTime(void) {
+   static int mdays[12] = {0,31,59,90,120,151,181,212,243,273,304,334};
+   char *s;
+   int stage, t;
+   struct tm dt;
+   M590E_Send_Blocking("AT+CCLK?\r", 9, -2, 2000);
+   if(strcmp(m590e_data.response[1], "OK") == 0) {
+      s = m590e_data.response[0];
+      stage = 1;
+      while(stage != 0) {
+         switch(stage) {
+            case 1:
+               if((s=strchr(s, '\"')) != NULL) {
+                  dt.tm_year = atoi(s+1) + 2000 - 1900;
+                  stage = 2;
+               }
+               else stage = 100;
+               break;
+            case 2:
+               if((s=strchr(s+1, '/')) != NULL) {
+                  dt.tm_mon = atoi(s+1) - 1;
+                  stage = 3;
+               }
+               else stage = 100;
+               break;
+            case 3:
+               if((s=strchr(s+1, '/')) != NULL) {
+                  dt.tm_mday = atoi(s+1);
+                  stage = 4;
+               }
+               else stage = 100;
+               break;
+            case 4:
+               if((s=strchr(s+1, ',')) != NULL) {
+                  dt.tm_hour = atoi(s+1);
+                  stage = 5;
+               }
+               else stage = 100;
+               break;
+            case 5:
+               if((s=strchr(s+1, ':')) != NULL) {
+                  dt.tm_min = atoi(s+1);
+                  stage = 6;
+               }
+               else stage = 100;
+               break;
+            case 6:
+               if((s=strchr(s+1, ':')) != NULL) {
+                  dt.tm_sec = atoi(s+1);
+                  stage = 7;
+               }
+               else stage = 100;
+               break;
+            case 7: //all ok
+               t = ((dt.tm_year+1900-1970)*365 + ((dt.tm_year+1900-1-1968)>>2) + mdays[dt.tm_mon+1-1] + (dt.tm_mday-1))*86400 + dt.tm_hour*3600 + dt.tm_min*60 + dt.tm_sec;
+               stage = 0;
+               break;
+            case 100: //something wrong
+               t = 0;
+               stage = 0;
+               break;
+         }
+      }
+   }
+   else {
+      t = 0;
+   }
+   return t;
 }
 
 //jei k neigiamas, atsakymu sulaukiu bet ju neatspausdinu
@@ -246,8 +322,7 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                l = mysprintf(buf,"AT+CMGR=%d\r",i);
                PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 3, 2000));
                if(strcmp(m590e_data.response[2], "OK")==0) {
-                  strcpy(buf+l-1, " ok");
-                  output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+                  output(m590e_data.response[0], eOutputSubsystemM590E, eOutputLevelDebug);
                   if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=0 && (s=strchr(s, '+'))!=0) {
                      strncpy(m590e_data.source_number, s, MAX_SRC_SIZE-1);
                      m590e_data.source_number[MAX_SRC_SIZE-1] = 0;
@@ -367,6 +442,10 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
 
    PT_WAIT_WHILE(pt, m590e_data.ready==0);
 
+   PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
+
+   m590e_data.mutex = 0;
+
    for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
       if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
          strncpy(m590e_data.source_number, m590e_data.periodic_sms[i].src, MAX_SRC_SIZE-1);
@@ -380,6 +459,43 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
          strcpy(m590e_data.source_number, "\0");
       }
    }
+
+   m590e_data.mutex = 1;
+
+   PT_END(pt);
+}
+
+PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
+   static int i;
+   int t;
+
+   PT_BEGIN(pt);
+
+   PT_WAIT_WHILE(pt, m590e_data.ready==0);
+
+   PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
+
+   m590e_data.mutex = 0;
+
+   t = M590E_Get_UnixTime();
+
+   if(m590e_data.pir_last_time == 0)
+      m590e_data.pir_last_time = t;
+
+   if(t-m590e_data.pir_last_time >= PIR_SMS_INTERVAL) {
+      m590e_data.pir_last_time = t;
+      for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) { //PIR zinute gaus tie kas uzsisake periodini kazkokios komandos gavima
+         if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
+            strncpy(m590e_data.source_number, m590e_data.periodic_sms[i].src, MAX_SRC_SIZE-1); //output'as issius sms'a jei bus uzpildytas numeris
+            m590e_data.source_number[MAX_SRC_SIZE-1] = '\0';
+            Fifo_Put(&fifo_command_parser, "pir");
+            PT_YIELD(pt);
+            strcpy(m590e_data.source_number, "\0");
+         }
+      }
+   }
+
+   m590e_data.mutex = 1;
 
    PT_END(pt);
 }

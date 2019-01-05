@@ -1,10 +1,14 @@
 #include "systick.h"
+#include "boozer.h"
 #include "clocks.h"
+#include "hcsr501.h"
 #include "m590e.h"
 #include "main.h"
 #include "vswitch.h"
 #include "lpc824.h"
 
+extern struct Boozer_Data boozer_data;
+extern struct HCSR501_Data hcsr501_data;
 extern struct M590E_Data m590e_data;
 extern struct Main_Data main_data;
 extern struct VSwitch_Data vswitch_data;
@@ -57,5 +61,24 @@ void Systick_Handler(void) {
          SIENF = (1<<1);
          main_data.wakeup_cause |= (1<<eWakeupCauseRingEnded);
       }
+   }
+   if(hcsr501_data.active) {
+      hcsr501_data.duration += 1;
+      if(HCSR501_Active()) {
+         hcsr501_data.delay = 0;
+      }
+      else if(++hcsr501_data.delay == 200) {
+         Boozer_Off();
+         hcsr501_data.active = 0;
+         hcsr501_data.delay = 0;
+         hcsr501_data.duration -= 200;
+         RISE = (1<<2);
+         SIENR = (1<<2);
+         main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501End);
+      }
+   }
+   if(boozer_data.active && boozer_data.duration>=0) { //jei duration neigiamas reiskia boozer'is paleistas neribota laiko intervala
+      if(--boozer_data.duration <= 0)
+         Boozer_Off();
    }
 }

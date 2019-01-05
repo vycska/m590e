@@ -1,5 +1,6 @@
 #include "handle_command.h"
 #include "adc.h"
+#include "boozer.h"
 #include "config.h"
 #include "ds18b20.h"
 #include "dump.h"
@@ -70,6 +71,18 @@ void Handle_Command(char *pString) {
       case 0x042e: //ip [init print]
          Init_Print();
          break;
+      case 0x350b: //cause
+         mysprintf(buf, "0x%x", main_data.wakeup_cause);
+         output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         break;
+      case 0x7327: //time
+         t = M590E_Get_UnixTime();
+         mysprintf(buf, "%u", t);
+         output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         break;
+      case 0x6ede: // pir [pir detected motion]
+         output("motion detected", eOutputSubsystemSystem, eOutputLevelImportant);
+         break;
       case 0xaded: //om [output mask]
          if(params_count(params)==1) {
             mysprintf(buf,"eOutputChannelUART %d",(int)eOutputChannelUART);
@@ -81,6 +94,8 @@ void Handle_Command(char *pString) {
             mysprintf(buf,"System %d",(int)eOutputSubsystemSystem);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"VSwitch %d",(int)eOutputSubsystemVSwitch);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf,"HCSR501 %d",(int)eOutputSubsystemHCSR501);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
             mysprintf(buf,"Debug %d",(int)eOutputLevelDebug);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
@@ -192,6 +207,11 @@ void Handle_Command(char *pString) {
          break;
       case 0xba23: //dump
          dump_print();
+         break;
+      case 0xa33e: //z [boozer]
+         if(params_count(params)==2 && params_integer(2, params)) {
+            Boozer_On(params[2]);
+         }
          break;
       default:
          output("unknown command", eOutputSubsystemSystem, eOutputLevelImportant);

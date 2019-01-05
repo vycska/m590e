@@ -11,7 +11,8 @@ enum eOutputSubsystem {
    eOutputSubsystemM590E      = 0,
    eOutputSubsystemSystem     = 1,
    eOutputSubsystemVSwitch    = 2,
-   eOutputSubsystemLast       = 3
+   eOutputSubsystemHCSR501    = 3,
+   eOutputSubsystemLast       = 4
 };
 
 enum eOutputLevel { //kuris bitas kaukeje; reiksme 1 tame bite reiskia uzblokavima
