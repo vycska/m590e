@@ -12,9 +12,9 @@
 
 #define MAX_INIT_TRIES 5
 
-#define PERIODIC_SMS_RECIPIENTS 3
-#define PERIODIC_SMS_COMMANDS 3
-#define PERIODIC_SMS_COMMAND_SIZE 16
+#define PERIODIC_SMS_RECIPIENTS 4
+#define PERIODIC_SMS_COMMANDS 5
+#define PERIODIC_SMS_COMMAND_SIZE 8
 
 #define PIR_SMS_INTERVAL 300 //5 min
 
@@ -44,5 +44,8 @@ PT_THREAD(M590E_SMSParse(struct pt *pt));
 PT_THREAD(M590E_SMSSend(struct pt *pt));
 PT_THREAD(M590E_SMSPeriodic(struct pt *pt));
 PT_THREAD(M590E_SMSPIR(struct pt *pt));
+void M590E_Periodic_Interval(int n);
+int M590E_Periodic_Add(char *src, char *cmd);
+void M590E_Periodic_Clear(char *src);
 
 #endif

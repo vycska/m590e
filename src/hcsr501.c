@@ -1,8 +1,10 @@
 #include "hcsr501.h"
 #include "boozer.h"
+#include "m590e.h"
 #include "main.h"
 #include "lpc824.h"
 
+extern struct M590E_Data m590e_data;
 extern struct Main_Data main_data;
 
 struct HCSR501_Data hcsr501_data;
@@ -27,7 +29,8 @@ int HCSR501_Active(void) {
 void PININT2_IRQHandler(void) {
    CIENR = (1<<2); //disable rising edge interrupt for pin selected in PINTSEL2
    RISE = (1<<2); //clear rising edge detection
-   main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501Start);
+   if(m590e_data.ready)
+      main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501Start); //sitas "cause" issius sms, tad jei modemas neparuostas, to nereikia daryti (ir laukti taip pat)
    if(hcsr501_data.active==0) {
       Boozer_On(-1);
       hcsr501_data.active = 1;

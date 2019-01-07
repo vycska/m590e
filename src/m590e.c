@@ -204,14 +204,14 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
 
    Fifo_Clear(&fifo_m590e_responses);
 
-   status = 1;
+   status = 2;
    while(status) {
       switch(status) {
-         case 1:
+         case 1: //palaukimas
             timer_set(&timer, 5000);
             PT_WAIT_UNTIL(pt, timer_expired(&timer));
             tries += 1;
-            if(tries > MAX_INIT_TRIES) {
+            if(tries >= MAX_INIT_TRIES) {
                status = 0;
                tries = 0;
             }
@@ -276,6 +276,20 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
             }
             break;
          case 6:
+            l = mysprintf(buf, "AT+CPBS=\"SM\"\r");
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+            if(strcmp(m590e_data.response[0],"OK")==0) {
+               status = 7;
+               strcpy(buf+l-1, " ok");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            else {
+               status = 1;
+               strcpy(buf+l-1, " error");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            break;
+         case 7:
             l = mysprintf(buf, "AT+CNMI=2,1,2,0,0\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
             if(strcmp(m590e_data.response[0],"OK")==0) {
@@ -440,7 +454,7 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
 
    PT_BEGIN(pt);
 
-   PT_WAIT_WHILE(pt, m590e_data.ready==0);
+   //cia nelaukiu m590e_data.ready, nes kad jis butu == 1 patikrinu pries nustatydamas "cause", ir be to jei modemas neveikai, cia neverta laukti
 
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
@@ -471,7 +485,7 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
 
    PT_BEGIN(pt);
 
-   PT_WAIT_WHILE(pt, m590e_data.ready==0);
+   //cia nelaukiu m590e_data.ready, nes kad jis butu == 1 patikrinu pries nustatydamas "cause", ir be to jei modemas neveikai, cia neverta laukti
 
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
@@ -498,4 +512,39 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
    m590e_data.mutex = 1;
 
    PT_END(pt);
+}
+
+void M590E_Periodic_Interval(int n) {
+   m590e_data.periodic_sms_interval=n;
+   WKT_Set(m590e_data.periodic_sms_interval);
+}
+
+int M590E_Periodic_Add(char *src, char *cmd) { //cmd gali buti "\0"
+   int i, j, res;
+   for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, src, MAX_SRC_SIZE-1)!=0; i++);
+   if(i == PERIODIC_SMS_RECIPIENTS) //jau esantis numeris nerastas -- ieskosim laisvos vietos
+      for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0; i++);
+   if(i<PERIODIC_SMS_RECIPIENTS) { //rastas jau esantis gavejas arba sukurtas naujas
+      strncpy(m590e_data.periodic_sms[i].src, src, MAX_SRC_SIZE-1);
+      m590e_data.periodic_sms[i].src[MAX_SRC_SIZE-1] = '\0';
+      for(j=0; j<PERIODIC_SMS_COMMANDS && strncmp(m590e_data.periodic_sms[i].commands[j],"",1)!=0; j++);
+      if(j < PERIODIC_SMS_COMMANDS) { //rasta laisva vieta
+         strncpy(m590e_data.periodic_sms[i].commands[j], cmd, PERIODIC_SMS_COMMAND_SIZE-1);
+         m590e_data.periodic_sms[i].commands[j][PERIODIC_SMS_COMMAND_SIZE-1] = '\0';
+         res = 0;
+      }
+      else res = 1;
+   }
+   else res = 2;
+   return res;
+}
+
+void M590E_Periodic_Clear(char *src) {
+   int i, j;
+   for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, src, MAX_SRC_SIZE-1)!=0; i++);
+   if(i<PERIODIC_SMS_RECIPIENTS) {
+      strcpy(m590e_data.periodic_sms[i].src, "\0");
+      for(j=0; j<PERIODIC_SMS_COMMANDS; j++)
+         strcpy(m590e_data.periodic_sms[i].commands[j], "\0");
+   }
 }

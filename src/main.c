@@ -228,7 +228,8 @@ void WKT_IRQHandler(void) {
    WKT_CTRL |= (1<<1);
    if(m590e_data.periodic_sms_interval >= 60) //t.b. bent 1 min
       WKT_COUNT= m590e_data.periodic_sms_interval*10000;
-   main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
+   if(m590e_data.ready)
+      main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
 }
 
 void DeepSleep_Init(void) {

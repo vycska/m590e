@@ -162,47 +162,63 @@ void Handle_Command(char *pString) {
          M590E_Send_Blocking(buf, l, 9, 5000);
          break;
       case 0xa4be: //p [periodic sms]
-         if(params_count(params)==1) {
-            mysprintf(buf, "period: %d", m590e_data.periodic_sms_interval);
-            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
-               if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
-                  l = mysprintf(buf, "%s: ", m590e_data.periodic_sms[i].src);
-                  for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
-                     if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0)
-                        l += mysprintf(buf+l, "%s ", m590e_data.periodic_sms[i].commands[j]);
-                  }
+         t = strncmp(m590e_data.source_number, "", 1); //sitas bus naudojamas nustatyti ar komanda yra is gauto sms
+         switch(params_count(params)) {
+            case 1:
+               if(t == 0) {
+                  mysprintf(buf, "period: %d", m590e_data.periodic_sms_interval);
                   output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+                  for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
+                     if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
+                        l = mysprintf(buf, "%s: ", m590e_data.periodic_sms[i].src);
+                        for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
+                           if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0)
+                              l += mysprintf(buf+l, "%s ", m590e_data.periodic_sms[i].commands[j]);
+                        }
+                        output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+                     }
+                  }
                }
-            }
-         }
-         else if(params_count(params)==2 && params_integer(2, params)) {
-            if(params[2] == 0 && strncmp(m590e_data.source_number,"",1)!=0) {
-               for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, m590e_data.source_number, MAX_SRC_SIZE-1)!=0; i++);
-               if(i<PERIODIC_SMS_RECIPIENTS)
-                  for(j=0; j<PERIODIC_SMS_COMMANDS; j++)
-                     strcpy(m590e_data.periodic_sms[i].commands[j], "\0");
-            }
-            else {
-               m590e_data.periodic_sms_interval=params[2];
-               WKT_Set(m590e_data.periodic_sms_interval);
-            }
-         }
-         else if(params_count(params)==2 && !params_integer(2, params) && strncmp(m590e_data.source_number, "", 1) != 0) {
-            for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, m590e_data.source_number, MAX_SRC_SIZE-1)!=0; i++);
-            if(i == PERIODIC_SMS_RECIPIENTS)
-               for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0; i++);
-            if(i<PERIODIC_SMS_RECIPIENTS) {
-               strncpy(m590e_data.periodic_sms[i].src, m590e_data.source_number, MAX_SRC_SIZE-1);
-               m590e_data.periodic_sms[i].src[MAX_SRC_SIZE-1] = '\0';
-               for(j=0; j<PERIODIC_SMS_COMMANDS && strncmp(m590e_data.periodic_sms[i].commands[j],"",1)!=0; j++);
-               if(j == PERIODIC_SMS_COMMANDS) j=0;
-               strncpy(m590e_data.periodic_sms[i].commands[j], (char*)params[2], PERIODIC_SMS_COMMAND_SIZE-1);
-               m590e_data.periodic_sms[i].commands[j][PERIODIC_SMS_COMMAND_SIZE-1] = '\0';
-               mysprintf(buf, "i: %d, j: %d", i, j);
-               output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-            }
-            else output("all recipients slots are occupied", eOutputSubsystemSystem, eOutputLevelImportant);
+               else {
+                  M590E_Periodic_Add(m590e_data.source_number, ""); //pridejimas bet be komandos reiks, kad bus gaunami pir signalai
+               }
+               break;
+            case 2:
+               if(t == 0) {
+                  if(params_integer(2, params))
+                     M590E_Periodic_Interval(params[2]);
+                  else {
+                     if(strlen((char*)params[2]) == MAX_SRC_SIZE-1) {
+                        M590E_Periodic_Add((char*)params[2], "");
+                     }
+                  }
+               }
+               else { //gautas sms
+                  if(params_integer(2, params)) {
+                     if(params[2] == 0) {
+                        M590E_Periodic_Clear(m590e_data.source_number);
+                     }
+                     else {
+                        M590E_Periodic_Interval(params[2]);
+                     }
+                  }
+                  else {
+                     M590E_Periodic_Add(m590e_data.source_number, (char*)params[2]);
+                  }
+               }
+               break;
+            case 3:
+               if(t==0 && !params_integer(2, params) && strlen((char*)params[2])==MAX_SRC_SIZE-1) {
+                  if(params_integer(3, params)) {
+                     if(params[3] == 0) {
+                        M590E_Periodic_Clear((char*)params[2]);
+                     }
+                  }
+                  else {
+                     M590E_Periodic_Add((char*)params[2], (char*)params[3]);
+                  }
+               }
+               break;
          }
          break;
       case 0xba23: //dump
