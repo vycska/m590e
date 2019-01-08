@@ -19,7 +19,7 @@
 #define PIR_SMS_INTERVAL 300 //5 min
 
 struct Periodic_SMS {
-   char src[MAX_SRC_SIZE];
+   int src_index;
    char commands[PERIODIC_SMS_COMMANDS][PERIODIC_SMS_COMMAND_SIZE];
 };
 
@@ -47,5 +47,6 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt));
 void M590E_Periodic_Interval(int n);
 int M590E_Periodic_Add(char *src, char *cmd);
 void M590E_Periodic_Clear(char *src);
+int M590E_PhoneBook_Add(char *src);
 
 #endif

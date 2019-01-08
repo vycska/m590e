@@ -337,11 +337,12 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 3, 2000));
                if(strcmp(m590e_data.response[2], "OK")==0) {
                   output(m590e_data.response[0], eOutputSubsystemM590E, eOutputLevelDebug);
-                  if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=0 && (s=strchr(s, '+'))!=0) {
+                  if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=NULL && (s=strstr(s, "+370"))!=NULL) {
                      strncpy(m590e_data.source_number, s, MAX_SRC_SIZE-1);
                      m590e_data.source_number[MAX_SRC_SIZE-1] = 0;
                      Fifo_Put(&fifo_command_parser, m590e_data.response[1]);
                      PT_YIELD(pt); //susispenduojam, kad ivyktu komandos apdorojimas
+                     M590E_PhoneBook_Add(m590e_data.source_number); //irasome numeri i phone book'a
                      strcpy(m590e_data.source_number, "\0");
                   }
                }
@@ -450,7 +451,9 @@ PT_THREAD(M590E_SMSSend(struct pt *pt)) {
 }
 
 PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
-   static int i, j;
+   static char buf[16];
+   static int i, j, l;
+   char *p;
 
    PT_BEGIN(pt);
 
@@ -461,16 +464,20 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
    m590e_data.mutex = 0;
 
    for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
-      if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
-         strncpy(m590e_data.source_number, m590e_data.periodic_sms[i].src, MAX_SRC_SIZE-1);
-         m590e_data.source_number[MAX_SRC_SIZE-1] = '\0';
-         for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
-            if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0) {
-               Fifo_Put(&fifo_command_parser, m590e_data.periodic_sms[i].commands[j]);
-               PT_YIELD(pt);
+      if(m590e_data.periodic_sms[i].src_index != 0) {
+         l = mysprintf(buf, "AT+CPBR=%d\r", m590e_data.periodic_sms[i].src_index);
+         PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+         if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0],"+370"))!=NULL) {
+            strncpy(m590e_data.source_number, p, MAX_SRC_SIZE-1);
+            m590e_data.source_number[MAX_SRC_SIZE-1] = '\0';
+            for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
+               if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0) {
+                  Fifo_Put(&fifo_command_parser, m590e_data.periodic_sms[i].commands[j]);
+                  PT_YIELD(pt);
+               }
             }
+            strcpy(m590e_data.source_number, "\0");
          }
-         strcpy(m590e_data.source_number, "\0");
       }
    }
 
@@ -480,7 +487,9 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
 }
 
 PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
-   static int i;
+   static char buf[16];
+   static int i, l;
+   char *p;
    int t;
 
    PT_BEGIN(pt);
@@ -499,12 +508,16 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
    if(t-m590e_data.pir_last_time >= PIR_SMS_INTERVAL) {
       m590e_data.pir_last_time = t;
       for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) { //PIR zinute gaus tie kas uzsisake periodini kazkokios komandos gavima
-         if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
-            strncpy(m590e_data.source_number, m590e_data.periodic_sms[i].src, MAX_SRC_SIZE-1); //output'as issius sms'a jei bus uzpildytas numeris
-            m590e_data.source_number[MAX_SRC_SIZE-1] = '\0';
-            Fifo_Put(&fifo_command_parser, "pir");
-            PT_YIELD(pt);
-            strcpy(m590e_data.source_number, "\0");
+         if(m590e_data.periodic_sms[i].src_index != 0) {
+            l = mysprintf(buf, "AT+CPBR=%d\r", m590e_data.periodic_sms[i].src_index);
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+            if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0],"+370"))!=NULL) {
+               strncpy(m590e_data.source_number, p, MAX_SRC_SIZE-1);
+               m590e_data.source_number[MAX_SRC_SIZE-1] = '\0'; //output'as issius sms'a jei bus uzpildytas numeris
+               Fifo_Put(&fifo_command_parser, "pir");
+               PT_YIELD(pt);
+               strcpy(m590e_data.source_number, "\0");
+            }
          }
       }
    }
@@ -520,31 +533,65 @@ void M590E_Periodic_Interval(int n) {
 }
 
 int M590E_Periodic_Add(char *src, char *cmd) { //cmd gali buti "\0"
-   int i, j, res;
-   for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, src, MAX_SRC_SIZE-1)!=0; i++);
-   if(i == PERIODIC_SMS_RECIPIENTS) //jau esantis numeris nerastas -- ieskosim laisvos vietos
-      for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0; i++);
-   if(i<PERIODIC_SMS_RECIPIENTS) { //rastas jau esantis gavejas arba sukurtas naujas
-      strncpy(m590e_data.periodic_sms[i].src, src, MAX_SRC_SIZE-1);
-      m590e_data.periodic_sms[i].src[MAX_SRC_SIZE-1] = '\0';
-      for(j=0; j<PERIODIC_SMS_COMMANDS && strncmp(m590e_data.periodic_sms[i].commands[j],"",1)!=0; j++);
-      if(j < PERIODIC_SMS_COMMANDS) { //rasta laisva vieta
-         strncpy(m590e_data.periodic_sms[i].commands[j], cmd, PERIODIC_SMS_COMMAND_SIZE-1);
-         m590e_data.periodic_sms[i].commands[j][PERIODIC_SMS_COMMAND_SIZE-1] = '\0';
-         res = 0;
+   int i, j, src_index, res;
+   src_index = M590E_PhoneBook_Add(src);
+   if(src_index != 0) {
+      for(i=0; i<PERIODIC_SMS_RECIPIENTS && m590e_data.periodic_sms[i].src_index!=src_index; i++);
+      if(i == PERIODIC_SMS_RECIPIENTS) //jau esantis numeris nerastas -- ieskosim laisvos vietos
+         for(i=0; i<PERIODIC_SMS_RECIPIENTS && m590e_data.periodic_sms[i].src_index!=0; i++);
+      if(i<PERIODIC_SMS_RECIPIENTS) { //rastas jau esantis gavejas arba sukurtas naujas
+         m590e_data.periodic_sms[i].src_index = src_index;
+         for(j=0; j<PERIODIC_SMS_COMMANDS && strncmp(m590e_data.periodic_sms[i].commands[j],"",1)!=0; j++);
+         if(j < PERIODIC_SMS_COMMANDS) { //rasta laisva vieta
+            strncpy(m590e_data.periodic_sms[i].commands[j], cmd, PERIODIC_SMS_COMMAND_SIZE-1);
+            m590e_data.periodic_sms[i].commands[j][PERIODIC_SMS_COMMAND_SIZE-1] = '\0';
+            res = 0;
+         }
+         else res = 1;
       }
-      else res = 1;
+      else res = 2;
    }
-   else res = 2;
+   else res = 3;
    return res;
 }
 
 void M590E_Periodic_Clear(char *src) {
-   int i, j;
-   for(i=0; i<PERIODIC_SMS_RECIPIENTS && strncmp(m590e_data.periodic_sms[i].src, src, MAX_SRC_SIZE-1)!=0; i++);
-   if(i<PERIODIC_SMS_RECIPIENTS) {
-      strcpy(m590e_data.periodic_sms[i].src, "\0");
-      for(j=0; j<PERIODIC_SMS_COMMANDS; j++)
-         strcpy(m590e_data.periodic_sms[i].commands[j], "\0");
+   char *p, buf[32];
+   int i, j, l, src_index;
+   l = mysprintf(buf, "AT+CPBF=\"%s\"\r", src);
+   M590E_Send_Blocking(buf, l, -2, 10000);
+   if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0], "+CPBF: "))!=NULL) {
+      src_index = atoi(p+7);
+      for(i=0; i<PERIODIC_SMS_RECIPIENTS && m590e_data.periodic_sms[i].src_index!=src_index; i++);
+      if(i<PERIODIC_SMS_RECIPIENTS) {
+         m590e_data.periodic_sms[i].src_index = 0;
+         for(j=0; j<PERIODIC_SMS_COMMANDS; j++)
+            strcpy(m590e_data.periodic_sms[i].commands[j], "\0");
+      }
    }
+}
+
+int M590E_PhoneBook_Add(char *src) { //funkcija grazina telefono indeksa phone book'e [jei reikia, iraso]
+   char *p, buf[64];
+   int pb_index, l;
+   l = mysprintf(buf, "AT+CPBF=\"%s\"\r", src);
+   M590E_Send_Blocking(buf, l, -2, 10000);
+   if(strcmp(m590e_data.response[0], "OK")==0) {
+      l = mysprintf(buf, "AT+CPBS?\r");
+      M590E_Send_Blocking(buf, l, -2, 2000);
+      if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0], "\"SM\","))!=NULL) {
+         pb_index = atoi(p+5) + 1; //5 yra "'SM'," ilgis
+         l = mysprintf(buf, "AT+CPBW=%d,\"%s\",145,\"%s\"\r", pb_index, src, src);
+         M590E_Send_Blocking(buf, l, -1, 2000);
+         if(strcmp(m590e_data.response[0], "OK")!=0) pb_index = 0;
+      }
+      else pb_index = 0;
+   }
+   else if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0], "+CPBF: "))!=NULL) {
+      pb_index = atoi(p+7); //7 yra "+CPBF: " ilgis
+   }
+   else {
+      pb_index = 0;
+   }
+   return pb_index;
 }

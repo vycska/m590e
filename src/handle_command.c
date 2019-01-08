@@ -169,8 +169,8 @@ void Handle_Command(char *pString) {
                   mysprintf(buf, "period: %d", m590e_data.periodic_sms_interval);
                   output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
                   for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
-                     if(strncmp(m590e_data.periodic_sms[i].src, "", 1) != 0) {
-                        l = mysprintf(buf, "%s: ", m590e_data.periodic_sms[i].src);
+                     if(m590e_data.periodic_sms[i].src_index != 0) {
+                        l = mysprintf(buf, "%d: ", (int)m590e_data.periodic_sms[i].src_index);
                         for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
                            if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0)
                               l += mysprintf(buf+l, "%s ", m590e_data.periodic_sms[i].commands[j]);
