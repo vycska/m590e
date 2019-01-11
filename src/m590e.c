@@ -9,6 +9,7 @@
 #include "lpc824.h"
 #include "pt.h"
 #include "timer.h"
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -148,12 +149,12 @@ int M590E_Get_UnixTime(void) {
    return t;
 }
 
-//jei k neigiamas, atsakymu sulaukiu bet ju neatspausdinu
 void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
    char *s;
    int i;
    struct timer timer;
    UART1_Transmit(msg, len);
+   //output(msg, eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
    for(i=0; i<ABS(k) && i<MAX_RESPONSES; i++) {
       timer_set(&timer, delay);
       while(!(Fifo_Peek(&fifo_m590e_responses, &s)==1 || timer_expired(&timer)));
@@ -161,7 +162,7 @@ void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
          strncpy(m590e_data.response[i], s, MAX_RESPONSE_SIZE-1);
          m590e_data.response[i][MAX_RESPONSE_SIZE-1] = '\0';
          Fifo_Remove(&fifo_m590e_responses);
-         if(k>0) output(m590e_data.response[i], eOutputSubsystemSystem, eOutputLevelImportant);
+         //output(m590e_data.response[i], eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
       }
       else {
          while(i<ABS(k) && i<MAX_RESPONSES) strcpy(m590e_data.response[i++],"\0");
@@ -315,7 +316,7 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
 
 PT_THREAD(M590E_SMSParse(struct pt *pt)) {
    static char buf[32];
-   static int i, l, error, status;
+   static int l, ik, k, it, t, status;
    char *s;
 
    PT_BEGIN(pt);
@@ -331,11 +332,29 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
    status = 1;
    while(status) {
       switch(status) {
-         case 1: //perskaitom zinutes
-            for(error=0,i=1; !error; i++) {
-               l = mysprintf(buf,"AT+CMGR=%d\r",i);
+         case 1: //paziurim kiek yra zinuciu
+            l = mysprintf(buf, "AT+CPMS?\r");
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+            if(strcmp(m590e_data.response[1], "OK")==0 && (s=strstr(m590e_data.response[0], "\"SM\","))!=NULL && (k=atoi(s+5),(s=strstr(s+5,","))!=NULL)) {
+               status = (k>0 ? 2 : 0);
+               t = atoi(s+1);
+               mysprintf(buf+l-1, " ok [%d, %d]", k, t);
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            else {
+               status = 0;
+               strcpy(buf+l-1, " error");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            break;
+         case 2: //perskaitom zinutes
+            for(ik=0,it=1; ik<k && it<=t; it++) {
+               l = mysprintf(buf,"AT+CMGR=%d\r",it);
                PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 3, 2000));
                if(strcmp(m590e_data.response[2], "OK")==0) {
+                  ik += 1;
+                  mysprintf(buf+l-1, " ok [%s]", m590e_data.response[1]);
+                  output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                   output(m590e_data.response[0], eOutputSubsystemM590E, eOutputLevelDebug);
                   if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=NULL && (s=strstr(s, "+370"))!=NULL) {
                      strncpy(m590e_data.source_number, s, MAX_SRC_SIZE-1);
@@ -347,14 +366,13 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                   }
                }
                else {
-                  error = 1;
                   strcpy(buf+l-1, " error");
                   output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                }
             }
-            status = 2;
+            status = 3;
             break;
-         case 2:
+         case 3:
             l = mysprintf(buf, "AT+CMGD=1,1\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
             if(strcmp(m590e_data.response[0],"OK")==0) {
@@ -365,7 +383,7 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                strcpy(buf+l-1, " error");
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             }
-            status = 0;
+            status = 1;
             break;
       }
    }
@@ -505,7 +523,7 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
    if(m590e_data.pir_last_time == 0)
       m590e_data.pir_last_time = t;
 
-   if(t-m590e_data.pir_last_time >= PIR_SMS_INTERVAL) {
+   if(t-m590e_data.pir_last_time >= m590e_data.pir_sms_interval) {
       m590e_data.pir_last_time = t;
       for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) { //PIR zinute gaus tie kas uzsisake periodini kazkokios komandos gavima
          if(m590e_data.periodic_sms[i].src_index != 0) {
@@ -545,13 +563,13 @@ int M590E_Periodic_Add(char *src, char *cmd) { //cmd gali buti "\0"
          if(j < PERIODIC_SMS_COMMANDS) { //rasta laisva vieta
             strncpy(m590e_data.periodic_sms[i].commands[j], cmd, PERIODIC_SMS_COMMAND_SIZE-1);
             m590e_data.periodic_sms[i].commands[j][PERIODIC_SMS_COMMAND_SIZE-1] = '\0';
-            res = 0;
+            res = OK;
          }
-         else res = 1;
+         else res = ER;
       }
-      else res = 2;
+      else res = ER;
    }
-   else res = 3;
+   else res = ER;
    return res;
 }
 

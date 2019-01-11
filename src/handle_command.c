@@ -81,7 +81,13 @@ void Handle_Command(char *pString) {
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x6ede: // pir [pir detected motion]
-         output("motion detected", eOutputSubsystemSystem, eOutputLevelImportant);
+         if(params_count(params)==1) {
+            mysprintf(buf, "motion detected [%d]", m590e_data.pir_sms_interval);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         }
+         else if(params_count(params)==2 && params_integer(2,params)) {
+            m590e_data.pir_sms_interval = params[2];
+         }
          break;
       case 0xaded: //om [output mask]
          if(params_count(params)==1) {
@@ -159,7 +165,7 @@ void Handle_Command(char *pString) {
             else
                l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
          }
-         M590E_Send_Blocking(buf, l, 9, 5000);
+         M590E_Send_Blocking(buf, l, MAX_RESPONSES, 5000);
          break;
       case 0xa4be: //p [periodic sms]
          t = strncmp(m590e_data.source_number, "", 1); //sitas bus naudojamas nustatyti ar komanda yra is gauto sms
@@ -173,7 +179,7 @@ void Handle_Command(char *pString) {
                         l = mysprintf(buf, "%d: ", (int)m590e_data.periodic_sms[i].src_index);
                         for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
                            if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0)
-                              l += mysprintf(buf+l, "%s ", m590e_data.periodic_sms[i].commands[j]);
+                              l += mysprintf(buf+l, "\'%s\' ", m590e_data.periodic_sms[i].commands[j]);
                         }
                         output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
                      }
@@ -235,15 +241,17 @@ void Handle_Command(char *pString) {
 }
 
 void params_fill(char *s, unsigned int *params) {
-   char *p,                     //pointer
-     l,                         //length
-     d,                         //all digits
-     k;                         //# params
-   int i;                       //iterator
+   char *p;
+   int i, l, q, d, k;
 
-   for(p=s, d=1, k=0, l=strlen(s), i=0; i<=l; i++) {
-      if(s[i]==' ' || i==l) {
-         s[i] = 0;
+   for(q=0, p=s, d=1, k=0, l=strlen(s), i=0; i<=l; i++) {
+      if(s[i]=='\'') {
+         q^=1;
+         if(q && *p=='\'') p+=1;
+         if(!q && (s[i+1]==' ' || i+1==l)) s[i]='\0';
+      }
+      else if((s[i]==' ' && !q) || i==l) {
+         s[i] = '\0';
          params[k+1] = d ? (params[0]|=(1<<(16+k+1)),atoi(p)) : (unsigned int)p;
          k += 1;
          d = 1;

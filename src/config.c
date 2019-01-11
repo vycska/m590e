@@ -14,7 +14,8 @@ extern struct Output_Data output_data;
 struct Config_Data config_data[] = {
    {(unsigned char*)output_data.mask,                    sizeof(output_data.mask)},
    {(unsigned char*)m590e_data.periodic_sms,             sizeof(m590e_data.periodic_sms)},
-   {(unsigned char*)&m590e_data.periodic_sms_interval,   sizeof(m590e_data.periodic_sms_interval)}
+   {(unsigned char*)&m590e_data.periodic_sms_interval,   sizeof(m590e_data.periodic_sms_interval)},
+   {(unsigned char*)&m590e_data.pir_sms_interval,        sizeof(m590e_data.pir_sms_interval)}
 };
 
 enum Config_Result config(enum Config_Mode mode) {

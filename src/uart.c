@@ -2,6 +2,7 @@
 #include "clocks.h"
 #include "dump.h"
 #include "fifos.h"
+#include "m590e.h"
 #include "main.h"
 #include "output.h"
 #include "utils.h"
@@ -13,6 +14,8 @@
 
 extern struct Fifo fifo_command_parser;
 extern struct Fifo fifo_m590e_responses;
+extern struct M590E_Data m590e_data;
+extern struct Main_Data main_data;
 
 static struct UART0_Data uart0_data;
 static struct UART1_Data uart1_data;
@@ -111,7 +114,29 @@ void UART1_IRQHandler(void) {
       if(ready_to_fifo) {
          uart1_data.s[uart1_data.i] = '\0';
          uart1_data.i = 0;
-         Fifo_Put(&fifo_m590e_responses, uart1_data.s);
+         //krc cia nzn ar man patinka, bet tiesiog reikia kai ka prafiltruoti ir visgi nusprendziau cia ta padaryti
+         if(strcmp(uart1_data.s, "MODEM:STARTUP") == 0) {
+            ready_to_fifo = 0;
+            m590e_data.ready = 0;
+         }
+         else if(strcmp(uart1_data.s, "+PBREADY") == 0) {
+            ready_to_fifo = 0;
+            m590e_data.ready = 0;
+            main_data.wakeup_cause |= (1<<eWakeupCauseM590EInit);
+         }
+         else if(strcmp(uart1_data.s, "RING") == 0) {
+            ready_to_fifo = 0;
+         }
+         else if(strcmp(uart1_data.s, "NO CARRIER") == 0) {
+            ready_to_fifo = 0;
+         }
+         else if(strstr(uart1_data.s, "+CMTI: \"SM\"") != NULL) {
+            ready_to_fifo = 0;
+         }
+         if(ready_to_fifo)
+            Fifo_Put(&fifo_m590e_responses, uart1_data.s); //fifo buferyje bus tik tie atsakymai kuriu as tikiuosi pries tai issiuntes savo komanda
+         else
+            output(uart1_data.s, eOutputSubsystemM590E, eOutputLevelDebug);
       }
    }
 }

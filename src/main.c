@@ -86,17 +86,13 @@ void main(void) {
             Fifo_Remove(&fifo_command_parser);
          }
 
+         /*
          while(((cause&(1<<eWakeupCauseRingActive))==0 || m590e_data.ring_active) && (cause&(1<<eWakeupCauseSmsSending))==0 && (cause&(1<<eWakeupCauseM590EInit))==0 && (cause&(1<<eWakeupCauseTimer))==0 && (cause&(1<<eWakeupCauseHCSR501Start))==0 && Fifo_Peek(&fifo_m590e_responses, &s)) {
+            output("!!! this is not what I expected !!!", eOutputSubsystemM590E, eOutputLevelImportant);
             output(s, eOutputSubsystemM590E, eOutputLevelImportant);
-            if(strcmp(s, "MODEM:STARTUP") == 0) {
-               m590e_data.ready = 0;
-            }
-            if(strcmp(s, "+PBREADY") == 0) {
-               m590e_data.ready = 0;
-               main_data.wakeup_cause |= (1<<eWakeupCauseM590EInit);
-            }
             Fifo_Remove(&fifo_m590e_responses);
          }
+         */
 
          if((cause&(1<<eWakeupCauseVSwitchReleased)) != 0) {
             mysprintf(buf, "vswitch duration: %d",vswitch_data.duration);
@@ -148,7 +144,7 @@ void main(void) {
          }
 
          if((cause&(1<<eWakeupCauseHCSR501Start)) != 0) {
-            if(PT_SCHEDULE(M590E_SMSPIR(&pt_m590e_smsparse)) == 0) {
+            if(PT_SCHEDULE(M590E_SMSPIR(&pt_m590e_smspir)) == 0) {
                _disable_irq();
                main_data.wakeup_cause &= (~(1<<eWakeupCauseHCSR501Start));
                _enable_irq();

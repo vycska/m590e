@@ -7,16 +7,17 @@
 #define MAX_SMS_SIZE 140
 #define MAX_SRC_SIZE 13
 
-#define MAX_RESPONSES 9
+#define MAX_RESPONSES 10
 #define MAX_RESPONSE_SIZE 80 //taip pat FIFO_ITEM_SIZE 80
 
 #define MAX_INIT_TRIES 5
 
 #define PERIODIC_SMS_RECIPIENTS 4
-#define PERIODIC_SMS_COMMANDS 5
-#define PERIODIC_SMS_COMMAND_SIZE 8
+#define PERIODIC_SMS_COMMANDS 4
+#define PERIODIC_SMS_COMMAND_SIZE 10
 
-#define PIR_SMS_INTERVAL 300 //5 min
+#define OK 0
+#define ER 1
 
 struct Periodic_SMS {
    int src_index;
@@ -26,9 +27,8 @@ struct Periodic_SMS {
 struct M590E_Data {
    char response[MAX_RESPONSES][MAX_RESPONSE_SIZE],
         source_number[MAX_SRC_SIZE];
-   int mutex, ready, pir_last_time;
-   volatile int ring_active, ring_delay, ring_duration;
-   int periodic_sms_interval;
+   int ready, pir_last_time, pir_sms_interval, periodic_sms_interval;
+   volatile int mutex, ring_active, ring_delay, ring_duration;
    struct Periodic_SMS periodic_sms[PERIODIC_SMS_RECIPIENTS];
 };
 

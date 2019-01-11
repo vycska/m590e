@@ -6,6 +6,7 @@
 #include "utils.h"
 #include "utils-asm.h"
 #include "lpc824.h"
+#include <ctype.h>
 #include <string.h>
 
 extern struct M590E_Data m590e_data;
@@ -14,7 +15,8 @@ extern struct Main_Data main_data;
 struct Output_Data output_data;
 
 void output(char *buf, enum eOutputSubsystem subsystem, enum eOutputLevel level) {
-   int l = strlen(buf), ll;
+   int l=strlen(buf), ll;
+   //for(i=l-1;i>=0 && !isprint(buf[i]); l--, i--);
    if((output_data.mask[eOutputChannelUART][subsystem] & (1<<level)) != 0)
       UART0_Transmit(buf, l, 1);
 
