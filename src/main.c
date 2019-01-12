@@ -86,26 +86,11 @@ void main(void) {
             Fifo_Remove(&fifo_command_parser);
          }
 
-         /*
-         while(((cause&(1<<eWakeupCauseRingActive))==0 || m590e_data.ring_active) && (cause&(1<<eWakeupCauseSmsSending))==0 && (cause&(1<<eWakeupCauseM590EInit))==0 && (cause&(1<<eWakeupCauseTimer))==0 && (cause&(1<<eWakeupCauseHCSR501Start))==0 && Fifo_Peek(&fifo_m590e_responses, &s)) {
-            output("!!! this is not what I expected !!!", eOutputSubsystemM590E, eOutputLevelImportant);
-            output(s, eOutputSubsystemM590E, eOutputLevelImportant);
-            Fifo_Remove(&fifo_m590e_responses);
-         }
-         */
-
          if((cause&(1<<eWakeupCauseVSwitchReleased)) != 0) {
             mysprintf(buf, "vswitch duration: %d",vswitch_data.duration);
             output(buf, eOutputSubsystemVSwitch, eOutputLevelDebug);
             _disable_irq();
             main_data.wakeup_cause &= (~(1<<eWakeupCauseVSwitchReleased));
-            _enable_irq();
-         }
-
-         if((cause&(1<<eWakeupCauseM590EWakeup)) != 0) {
-            M590E_Sleep_Exit();
-            _disable_irq();
-            main_data.wakeup_cause &= (~(1<<eWakeupCauseM590EWakeup));
             _enable_irq();
          }
 
@@ -119,7 +104,7 @@ void main(void) {
 
          if((cause&(1<<eWakeupCauseRingActive)) != 0) {
             if(!m590e_data.ring_active) {
-               if(PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse)) == 0) {
+               if(m590e_data.ready==0 || PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse))==0) {
                   _disable_irq();
                   main_data.wakeup_cause &= (~(1<<eWakeupCauseRingActive));
                   _enable_irq();
@@ -136,7 +121,7 @@ void main(void) {
          }
 
          if((cause&(1<<eWakeupCauseSmsSending)) != 0) {
-            if(PT_SCHEDULE(M590E_SMSSend(&pt_m590e_smssend)) == 0) {
+            if(m590e_data.ready==0 || PT_SCHEDULE(M590E_SMSSend(&pt_m590e_smssend))==0) {
                _disable_irq();
                main_data.wakeup_cause &= (~(1<<eWakeupCauseSmsSending));
                _enable_irq();
@@ -144,13 +129,12 @@ void main(void) {
          }
 
          if((cause&(1<<eWakeupCauseHCSR501Start)) != 0) {
-            if(PT_SCHEDULE(M590E_SMSPIR(&pt_m590e_smspir)) == 0) {
+            if(m590e_data.ready==0 || PT_SCHEDULE(M590E_SMSPIR(&pt_m590e_smspir))==0) {
                _disable_irq();
                main_data.wakeup_cause &= (~(1<<eWakeupCauseHCSR501Start));
                _enable_irq();
             }
          }
-
 
          if((cause&(1<<eWakeupCauseHCSR501End)) != 0) {
             mysprintf(buf, "hcsr501 duration: %d",hcsr501_data.duration);
@@ -158,11 +142,10 @@ void main(void) {
             _disable_irq();
             main_data.wakeup_cause &= (~(1<<eWakeupCauseHCSR501End));
             _enable_irq();
-
          }
 
          if((cause&(1<<eWakeupCauseTimer)) != 0) {
-            if(PT_SCHEDULE(M590E_SMSPeriodic(&pt_m590e_smsperiodic)) == 0) {
+            if(m590e_data.ready==0 || PT_SCHEDULE(M590E_SMSPeriodic(&pt_m590e_smsperiodic))==0) {
                _disable_irq();
                main_data.wakeup_cause &= (~(1<<eWakeupCauseTimer));
                _enable_irq();
@@ -174,6 +157,8 @@ void main(void) {
       if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active && !boozer_data.active && !hcsr501_data.active) {
          _enable_irq();
          M590E_Sleep_Enter();
+         timer_set(&timer, 1000);
+         while(!timer_expired(&timer));
          Systick_Stop();
          LED_Off();
          Boozer_Off(); //jeigu kartais per si pasiruosimo sleep'inti laikotarpi isijungtu boozer'is
@@ -181,10 +166,9 @@ void main(void) {
          LED_On();
          Systick_Start();
          ADC_Calibrate();
-         //krc cia nutariau padaryti delay'u, nes gauto sms atveju ateina ir pranesimas, kuri as noriu atspausdinti ir po to jau prikelti modema
          timer_set(&timer, 1000);
          while(!timer_expired(&timer));
-         main_data.wakeup_cause |= (1<<eWakeupCauseM590EWakeup);
+         M590E_Sleep_Exit();
       }
       _enable_irq();
    }
@@ -224,8 +208,7 @@ void WKT_IRQHandler(void) {
    WKT_CTRL |= (1<<1);
    if(m590e_data.periodic_sms_interval >= 60) //t.b. bent 1 min
       WKT_COUNT= m590e_data.periodic_sms_interval*10000;
-   if(m590e_data.ready)
-      main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
+   main_data.wakeup_cause |= (1<<eWakeupCauseTimer);
 }
 
 void DeepSleep_Init(void) {

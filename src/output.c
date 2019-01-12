@@ -15,8 +15,8 @@ extern struct Main_Data main_data;
 struct Output_Data output_data;
 
 void output(char *buf, enum eOutputSubsystem subsystem, enum eOutputLevel level) {
-   int l=strlen(buf), ll;
-   //for(i=l-1;i>=0 && !isprint(buf[i]); l--, i--);
+   int i, l=strlen(buf), ll;
+   for(i=l-1;i>=0 && !isprint(buf[i]); l--, i--);
    if((output_data.mask[eOutputChannelUART][subsystem] & (1<<level)) != 0)
       UART0_Transmit(buf, l, 1);
 

@@ -76,9 +76,12 @@ void Handle_Command(char *pString) {
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x7327: //time
-         t = M590E_Get_UnixTime();
-         mysprintf(buf, "%u", t);
-         output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         M590E_Send_Blocking("AT+CCLK?\r",9,-2,2000);
+         if(strcmp(m590e_data.response[1],"OK")==0) {
+            t = str2unixtime(m590e_data.response[0]);
+            mysprintf(buf, "%d", t);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         }
          break;
       case 0x6ede: // pir [pir detected motion]
          if(params_count(params)==1) {

@@ -9,10 +9,8 @@
 #include "lpc824.h"
 #include "pt.h"
 #include "timer.h"
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 extern struct Fifo fifo_command_parser;
 extern struct Fifo fifo_m590e_responses;
@@ -53,7 +51,6 @@ void M590E_Init(void) {
    main_data.wakeup_cause |= (1<<eWakeupCauseM590EInit);
 }
 
-
 int Ring_Active(void) {
    return ((PIN0>>13)&1) == 0;
 }
@@ -79,82 +76,12 @@ void PININT1_IRQHandler(void) {
    }
 }
 
-int M590E_Get_UnixTime(void) {
-   static int mdays[12] = {0,31,59,90,120,151,181,212,243,273,304,334};
-   char *s;
-   int stage, t;
-   struct tm dt;
-   M590E_Send_Blocking("AT+CCLK?\r", 9, -2, 2000);
-   if(strcmp(m590e_data.response[1], "OK") == 0) {
-      s = m590e_data.response[0];
-      stage = 1;
-      while(stage != 0) {
-         switch(stage) {
-            case 1:
-               if((s=strchr(s, '\"')) != NULL) {
-                  dt.tm_year = atoi(s+1) + 2000 - 1900;
-                  stage = 2;
-               }
-               else stage = 100;
-               break;
-            case 2:
-               if((s=strchr(s+1, '/')) != NULL) {
-                  dt.tm_mon = atoi(s+1) - 1;
-                  stage = 3;
-               }
-               else stage = 100;
-               break;
-            case 3:
-               if((s=strchr(s+1, '/')) != NULL) {
-                  dt.tm_mday = atoi(s+1);
-                  stage = 4;
-               }
-               else stage = 100;
-               break;
-            case 4:
-               if((s=strchr(s+1, ',')) != NULL) {
-                  dt.tm_hour = atoi(s+1);
-                  stage = 5;
-               }
-               else stage = 100;
-               break;
-            case 5:
-               if((s=strchr(s+1, ':')) != NULL) {
-                  dt.tm_min = atoi(s+1);
-                  stage = 6;
-               }
-               else stage = 100;
-               break;
-            case 6:
-               if((s=strchr(s+1, ':')) != NULL) {
-                  dt.tm_sec = atoi(s+1);
-                  stage = 7;
-               }
-               else stage = 100;
-               break;
-            case 7: //all ok
-               t = ((dt.tm_year+1900-1970)*365 + ((dt.tm_year+1900-1-1968)>>2) + mdays[dt.tm_mon+1-1] + (dt.tm_mday-1))*86400 + dt.tm_hour*3600 + dt.tm_min*60 + dt.tm_sec;
-               stage = 0;
-               break;
-            case 100: //something wrong
-               t = 0;
-               stage = 0;
-               break;
-         }
-      }
-   }
-   else {
-      t = 0;
-   }
-   return t;
-}
-
 void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
    char *s;
    int i;
    struct timer timer;
    UART1_Transmit(msg, len);
-   //output(msg, eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
+   output(msg, eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
    for(i=0; i<ABS(k) && i<MAX_RESPONSES; i++) {
       timer_set(&timer, delay);
       while(!(Fifo_Peek(&fifo_m590e_responses, &s)==1 || timer_expired(&timer)));
@@ -162,7 +89,7 @@ void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
          strncpy(m590e_data.response[i], s, MAX_RESPONSE_SIZE-1);
          m590e_data.response[i][MAX_RESPONSE_SIZE-1] = '\0';
          Fifo_Remove(&fifo_m590e_responses);
-         //output(m590e_data.response[i], eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
+         output(m590e_data.response[i], eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
       }
       else {
          while(i<ABS(k) && i<MAX_RESPONSES) strcpy(m590e_data.response[i++],"\0");
@@ -291,6 +218,21 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
             }
             break;
          case 7:
+            l = mysprintf(buf, "AT+CCLK?\r");
+            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+            if(strcmp(m590e_data.response[1],"OK")==0) {
+               m590e_data.pir_last_time = str2unixtime(m590e_data.response[0]);
+               status = 8;
+               strcpy(buf+l-1, " ok");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            else {
+               status = 1;
+               strcpy(buf+l-1, " error");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            break;
+         case 8:
             l = mysprintf(buf, "AT+CNMI=2,1,2,0,0\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
             if(strcmp(m590e_data.response[0],"OK")==0) {
@@ -320,8 +262,6 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
    char *s;
 
    PT_BEGIN(pt);
-
-   PT_WAIT_WHILE(pt, m590e_data.ready==0);
 
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
@@ -402,8 +342,6 @@ PT_THREAD(M590E_SMSSend(struct pt *pt)) {
 
    PT_BEGIN(pt);
 
-   PT_WAIT_WHILE(pt, m590e_data.ready==0);
-
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
    m590e_data.mutex = 0;
@@ -475,8 +413,6 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
 
    PT_BEGIN(pt);
 
-   //cia nelaukiu m590e_data.ready, nes kad jis butu == 1 patikrinu pries nustatydamas "cause", ir be to jei modemas neveikai, cia neverta laukti
-
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
    m590e_data.mutex = 0;
@@ -506,37 +442,57 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
 
 PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
    static char buf[16];
-   static int i, l;
+   static int i, l, status;
    char *p;
    int t;
 
    PT_BEGIN(pt);
 
-   //cia nelaukiu m590e_data.ready, nes kad jis butu == 1 patikrinu pries nustatydamas "cause", ir be to jei modemas neveikai, cia neverta laukti
-
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
    m590e_data.mutex = 0;
 
-   t = M590E_Get_UnixTime();
-
-   if(m590e_data.pir_last_time == 0)
-      m590e_data.pir_last_time = t;
-
-   if(t-m590e_data.pir_last_time >= m590e_data.pir_sms_interval) {
-      m590e_data.pir_last_time = t;
-      for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) { //PIR zinute gaus tie kas uzsisake periodini kazkokios komandos gavima
-         if(m590e_data.periodic_sms[i].src_index != 0) {
-            l = mysprintf(buf, "AT+CPBR=%d\r", m590e_data.periodic_sms[i].src_index);
+   status = 1;
+   while(status) {
+      switch(status) {
+         case 1:
+            l = mysprintf(buf, "AT+CCLK?\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
-            if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0],"+370"))!=NULL) {
-               strncpy(m590e_data.source_number, p, MAX_SRC_SIZE-1);
-               m590e_data.source_number[MAX_SRC_SIZE-1] = '\0'; //output'as issius sms'a jei bus uzpildytas numeris
-               Fifo_Put(&fifo_command_parser, "pir");
-               PT_YIELD(pt);
-               strcpy(m590e_data.source_number, "\0");
+            if(strcmp(m590e_data.response[1], "OK")==0) {
+               status = 2;
+               strcpy(buf+l-1, " ok");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             }
-         }
+            else {
+               status = 0;
+               strcpy(buf+l-1, " error");
+               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+            }
+            break;
+         case 2:
+            t = str2unixtime(m590e_data.response[0]);
+            if(t-m590e_data.pir_last_time >= m590e_data.pir_sms_interval) {
+               status = 3;
+               m590e_data.pir_last_time = t;
+            }
+            else status = 0;
+            break;
+         case 3:
+            for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) { //PIR zinute gaus tie kas uzsisake periodini kazkokios komandos gavima
+               if(m590e_data.periodic_sms[i].src_index != 0) {
+                  l = mysprintf(buf, "AT+CPBR=%d\r", m590e_data.periodic_sms[i].src_index);
+                  PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
+                  if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0],"+370"))!=NULL) {
+                     strncpy(m590e_data.source_number, p, MAX_SRC_SIZE-1);
+                     m590e_data.source_number[MAX_SRC_SIZE-1] = '\0'; //output'as issius sms'a jei bus uzpildytas numeris
+                     Fifo_Put(&fifo_command_parser, "pir");
+                     PT_YIELD(pt);
+                     strcpy(m590e_data.source_number, "\0");
+                  }
+               }
+            }
+            status = 0;
+            break;
       }
    }
 

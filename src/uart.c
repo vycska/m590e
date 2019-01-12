@@ -130,6 +130,12 @@ void UART1_IRQHandler(void) {
          else if(strcmp(uart1_data.s, "NO CARRIER") == 0) {
             ready_to_fifo = 0;
          }
+         else if(strcmp(uart1_data.s, "NO ANSWER") == 0) {
+            ready_to_fifo = 0;
+         }
+         else if(strcmp(uart1_data.s, "CONNECT") == 0) {
+            ready_to_fifo = 0;
+         }
          else if(strstr(uart1_data.s, "+CMTI: \"SM\"") != NULL) {
             ready_to_fifo = 0;
          }
