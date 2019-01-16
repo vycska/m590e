@@ -85,7 +85,12 @@ void Handle_Command(char *pString) {
          break;
       case 0x6ede: // pir [pir detected motion]
          if(params_count(params)==1) {
-            mysprintf(buf, "motion detected [%d]", m590e_data.pir_sms_interval);
+            if(m590e_data.source_number==0) {
+               mysprintf(buf, "%d", m590e_data.pir_sms_interval);
+            }
+            else {
+               mysprintf(buf, "motion detected! [%d]", m590e_data.pir_sms_interval);
+            }
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
          else if(params_count(params)==2 && params_integer(2,params)) {
@@ -171,35 +176,25 @@ void Handle_Command(char *pString) {
          M590E_Send_Blocking(buf, l, MAX_RESPONSES, 5000);
          break;
       case 0xa4be: //p [periodic sms]
-         t = strncmp(m590e_data.source_number, "", 1); //sitas bus naudojamas nustatyti ar komanda yra is gauto sms
          switch(params_count(params)) {
             case 1:
-               if(t == 0) {
-                  mysprintf(buf, "period: %d", m590e_data.periodic_sms_interval);
-                  output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-                  for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
-                     if(m590e_data.periodic_sms[i].src_index != 0) {
-                        l = mysprintf(buf, "%d: ", (int)m590e_data.periodic_sms[i].src_index);
-                        for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
-                           if(strncmp(m590e_data.periodic_sms[i].commands[j], "", 1) != 0)
-                              l += mysprintf(buf+l, "\'%s\' ", m590e_data.periodic_sms[i].commands[j]);
-                        }
-                        output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+               mysprintf(buf, "period: %d", m590e_data.periodic_sms_interval);
+               output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+               for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) {
+                  if(m590e_data.periodic_sms[i].src_index != 0) {
+                     l = mysprintf(buf, "%d: ", m590e_data.periodic_sms[i].src_index);
+                     for(j=0; j<PERIODIC_SMS_COMMANDS; j++) {
+                        if(strcmp(m590e_data.periodic_sms[i].commands[j], "") != 0)
+                           l += mysprintf(buf+l, "\'%s\' ", m590e_data.periodic_sms[i].commands[j]);
                      }
+                     output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
                   }
-               }
-               else {
-                  M590E_Periodic_Add(m590e_data.source_number, ""); //pridejimas bet be komandos reiks, kad bus gaunami pir signalai
                }
                break;
             case 2:
-               if(t == 0) {
-                  if(params_integer(2, params))
+               if(m590e_data.source_number == 0) {
+                  if(params_integer(2, params)) {
                      M590E_Periodic_Interval(params[2]);
-                  else {
-                     if(strlen((char*)params[2]) == MAX_SRC_SIZE-1) {
-                        M590E_Periodic_Add((char*)params[2], "");
-                     }
                   }
                }
                else { //gautas sms
@@ -217,14 +212,14 @@ void Handle_Command(char *pString) {
                }
                break;
             case 3:
-               if(t==0 && !params_integer(2, params) && strlen((char*)params[2])==MAX_SRC_SIZE-1) {
+               if(m590e_data.source_number==0 && params_integer(2, params)) {
                   if(params_integer(3, params)) {
                      if(params[3] == 0) {
-                        M590E_Periodic_Clear((char*)params[2]);
+                        M590E_Periodic_Clear(params[2]);
                      }
                   }
                   else {
-                     M590E_Periodic_Add((char*)params[2], (char*)params[3]);
+                     M590E_Periodic_Add(params[2], (char*)params[3]);
                   }
                }
                break;

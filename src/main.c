@@ -53,17 +53,17 @@ void main(void) {
 
    main_data.config_load_result = config(eConfigModeLoad); //load config
 
-   ADC_Init(); //ADC pin P0.14
+   ADC_Init(); //P0.14
    DeepSleep_Init();
-   LED_Init(eLedModeOn);
+   LED_Init(eLedModeOn); //P0.23
    Systick_Init(eSystickInitModeOn);
-   UART0_Init();
-   VSwitch_Init(); //virtual switch on pin P0.12
+   UART0_Init(); //P0.0, P0.4
+   VSwitch_Init(); //P0.12
 
    Boozer_Init(); //P0.5
-   DS18B20_Init(); //this initializes one-wire pin P0.9
+   DS18B20_Init(); //P0.9
    HCSR501_Init(); //P0.8
-   M590E_Init();
+   M590E_Init(); //P0.2, P0.3, P0.13, P0.17
 
    Fifo_Init(&fifo_command_parser);
    Fifo_Init(&fifo_m590e_responses);

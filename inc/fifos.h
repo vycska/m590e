@@ -17,8 +17,8 @@ struct Fifo {
 };
 
 struct Fifo_SMS_Item {
-   char src[FIFO_SMS_SRC_SIZE], msg[FIFO_SMS_MSG_SIZE];
-   int len;
+   char msg[FIFO_SMS_MSG_SIZE];
+   int src, len;
 };
 
 struct Fifo_SMS {
@@ -34,9 +34,8 @@ void Fifo_Remove(struct Fifo*);
 void Fifo_Put(struct Fifo*, char*);
 
 void Fifo_SMS_Init(void);
-void Fifo_SMS_Put(char *msg, int len, char *src);
-int Fifo_SMS_Peek(char **msg, int **len, char **src);
-void Fifo_SMS_Change(char *msg, int len, char *src);
+void Fifo_SMS_Put(char *msg, int len, int src);
+int Fifo_SMS_Peek(char **msg, int **len, int **src);
 void Fifo_SMS_Remove(void);
 int Fifo_SMS_Count(void);
 

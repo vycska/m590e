@@ -25,9 +25,8 @@ struct Periodic_SMS {
 };
 
 struct M590E_Data {
-   char response[MAX_RESPONSES][MAX_RESPONSE_SIZE],
-        source_number[MAX_SRC_SIZE];
-   int ready, pir_last_time, pir_sms_interval, periodic_sms_interval;
+   char response[MAX_RESPONSES][MAX_RESPONSE_SIZE];
+   int ready, source_number, pir_last_time, pir_sms_interval, periodic_sms_interval;
    volatile int mutex, ring_active, ring_delay, ring_duration;
    struct Periodic_SMS periodic_sms[PERIODIC_SMS_RECIPIENTS];
 };
@@ -45,8 +44,8 @@ PT_THREAD(M590E_SMSSend(struct pt *pt));
 PT_THREAD(M590E_SMSPeriodic(struct pt *pt));
 PT_THREAD(M590E_SMSPIR(struct pt *pt));
 void M590E_Periodic_Interval(int n);
-int M590E_Periodic_Add(char *src, char *cmd);
-void M590E_Periodic_Clear(char *src);
+int M590E_Periodic_Add(int src, char *cmd);
+void M590E_Periodic_Clear(int src);
 int M590E_PhoneBook_Add(char *src);
 
 #endif

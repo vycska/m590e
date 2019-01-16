@@ -55,10 +55,9 @@ void Fifo_SMS_Init(void) {
    fifo_sms.i_put = 0;
 }
 
-void Fifo_SMS_Put(char *msg, int len, char *src) {
+void Fifo_SMS_Put(char *msg, int len, int src) {
    if(fifo_sms.count < FIFO_SMS_ITEMS) {
-      strncpy(fifo_sms.item[fifo_sms.i_put].src, src, FIFO_SMS_SRC_SIZE-1);
-      fifo_sms.item[fifo_sms.i_put].src[FIFO_SMS_SRC_SIZE-1] = '\0';
+      fifo_sms.item[fifo_sms.i_put].src = src;
       strncpy(fifo_sms.item[fifo_sms.i_put].msg, msg, FIFO_SMS_MSG_SIZE-1);
       fifo_sms.item[fifo_sms.i_put].msg[FIFO_SMS_MSG_SIZE-1] = '\0';
       fifo_sms.item[fifo_sms.i_put].len = MIN2(len, FIFO_SMS_MSG_SIZE-1);
@@ -69,26 +68,16 @@ void Fifo_SMS_Put(char *msg, int len, char *src) {
    }
 }
 
-int Fifo_SMS_Peek(char **msg, int **len, char **src) {
+int Fifo_SMS_Peek(char **msg, int **len, int **src) {
    int res;
    if(fifo_sms.count > 0) {
-      *src = fifo_sms.item[fifo_sms.i_get].src;
+      *src = &fifo_sms.item[fifo_sms.i_get].src;
       *msg = fifo_sms.item[fifo_sms.i_get].msg;
       *len = &fifo_sms.item[fifo_sms.i_get].len;
       res = 1;
    }
    else res = 0;
    return res;
-}
-
-void Fifo_SMS_Change(char *msg, int len, char *src) {
-   if(fifo_sms.count > 0) {
-      strncpy(fifo_sms.item[fifo_sms.i_get].src, src, FIFO_SMS_SRC_SIZE-1);
-      fifo_sms.item[fifo_sms.i_get].src[FIFO_SMS_SRC_SIZE-1] = '\0';
-      strncpy(fifo_sms.item[fifo_sms.i_get].msg, msg, FIFO_SMS_MSG_SIZE-1);
-      fifo_sms.item[fifo_sms.i_get].msg[FIFO_SMS_MSG_SIZE-1] = '\0';
-      fifo_sms.item[fifo_sms.i_get].len = len;
-   }
 }
 
 void Fifo_SMS_Remove(void) {
