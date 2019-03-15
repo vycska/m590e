@@ -15,18 +15,13 @@ extern struct Main_Data main_data;
 struct Output_Data output_data;
 
 void output(char *buf, enum eOutputSubsystem subsystem, enum eOutputLevel level) {
-   int i, l=strlen(buf), ll;
+   int i, l=strlen(buf);
    for(i=l-1;i>=0 && !isprint(buf[i]); l--, i--);
    if((output_data.mask[eOutputChannelUART][subsystem] & (1<<level)) != 0)
       UART0_Transmit(buf, l, 1);
 
    if((output_data.mask[eOutputChannelSMS][subsystem]&(1<<level))!=0 && m590e_data.source_number!=0) { //sms gali buti siunciamas tik tada, kai tai yra atsakymas i atsiusta sms uzklausa/komanda
-      while(l>0) {
-         ll = MIN2(l, FIFO_SMS_MSG_SIZE-1); //-1 nes buferyje dar talpinama '\0'
-         Fifo_SMS_Put(buf, ll, m590e_data.source_number);
-         l -= ll;
-         buf += ll;
-      }
+      Fifo_SMS_Put(buf, l, m590e_data.source_number);
       _disable_irq();
       main_data.wakeup_cause |= (1<<eWakeupCauseSmsSending);
       _enable_irq();

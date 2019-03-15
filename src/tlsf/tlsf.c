@@ -863,7 +863,7 @@ static void default_walker(void *ptr, size_t size, int used, void *user) {
    char buf[64];
    (void)user;
    mysprintf(buf, "\t0x%x %s size: 0x%x (0x%x)\n", (unsigned int)ptr, used ? "used" : "free", (unsigned int)size, (unsigned int)block_from_ptr(ptr));
-   output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+   output(buf, eOutputSubsystemSystem, eOutputLevelDebug);
    //printf("\t%p %s size: %x (%p)\n", ptr, used ? "used" : "free", (unsigned int)size, block_from_ptr(ptr));
 }
 

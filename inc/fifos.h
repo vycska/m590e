@@ -3,28 +3,25 @@
 
 #include "m590e.h"
 
-#define FIFO_ITEMS 8
-#define FIFO_ITEM_SIZE 80
-
-#define FIFO_SMS_ITEMS 24
-#define FIFO_SMS_SRC_SIZE MAX_SRC_SIZE
-#define FIFO_SMS_MSG_SIZE 32
+struct Fifo_Item {
+   char *s;
+   struct Fifo_Item *next;
+};
 
 struct Fifo {
-   volatile char buffer[FIFO_ITEMS][FIFO_ITEM_SIZE];
    volatile int count;
-   int i_get, i_put;
+   struct Fifo_Item *head;
 };
 
 struct Fifo_SMS_Item {
-   char msg[FIFO_SMS_MSG_SIZE];
+   char *msg;
    int src, len;
+   struct Fifo_SMS_Item *next;
 };
 
 struct Fifo_SMS {
-   struct Fifo_SMS_Item item[FIFO_SMS_ITEMS];
    volatile int count;
-   int i_get, i_put;
+   struct Fifo_SMS_Item *head;
 };
 
 void Fifo_Init(struct Fifo*);

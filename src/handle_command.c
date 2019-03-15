@@ -277,17 +277,15 @@ void Handle_Command(char *pString) {
             mysprintf(buf, "tlsf_alloc_overhead: %u", val);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
 
-            for(t=2,i=2; i<12; i++) {
-               t *= 2;
-               mem = tlsf_malloc(tlsf, t);
-               mysprintf(buf, "req: %u, mem: 0x%x", t, (unsigned int)mem);
-               output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
-               tlsf_walk_pool(pool, NULL, NULL); //antras parametras NULL reiskia default_walker
-               if(mem != NULL) {
-                  tlsf_free(tlsf, mem);
-                  output("after tlsf_free", eOutputSubsystemSystem, eOutputLevelImportant);
-                  tlsf_walk_pool(pool, NULL, NULL);
-               }
+            t = (params_count(params)==2 && params_integer(2, params) ? params[2] : 100);
+            mem = tlsf_malloc(tlsf, t);
+            mysprintf(buf, "req: %u, mem: 0x%x", t, (unsigned int)mem);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            tlsf_walk_pool(pool, NULL, NULL); //antras parametras NULL reiskia default_walker
+            if(mem != NULL) {
+               tlsf_free(tlsf, mem);
+               output("after tlsf_free", eOutputSubsystemSystem, eOutputLevelImportant);
+               tlsf_walk_pool(pool, NULL, NULL);
             }
          }
          break;
