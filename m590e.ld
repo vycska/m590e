@@ -1,6 +1,6 @@
 ENTRY(Reset_Handler)
 
-__stack_size = 3072;
+__stack_size = 2048;
 __checksum = -(_stack_end + (Reset_Handler | 1) + (NMI_Handler | 1) + (HardFault_Handler | 1));
 
 MEMORY

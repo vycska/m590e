@@ -159,8 +159,8 @@ int ndigits(int n) {
 
 int str2unixtime(char *s) {
    static int mdays[12] = {0,31,59,90,120,151,181,212,243,273,304,334};
-   int stage, t;
-   struct tm dt;
+   int stage, t=0;
+   struct tm dt = {0};
    stage = 1;
    while(stage != 0) {
       switch(stage) {

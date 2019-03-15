@@ -12,12 +12,14 @@
 #include "systick.h"
 #include "uart.h"
 #include "utils.h"
+#include "tlsf.h"
 #include "lpc824.h"
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern char _flash_start, _flash_end, _ram_start, _ram_end, _heap_start;
+extern tlsf_t tlsf;
 extern struct M590E_Data m590e_data;
 extern struct Main_Data main_data;
 extern struct Output_Data output_data;
@@ -231,6 +233,62 @@ void Handle_Command(char *pString) {
       case 0xa33e: //z [boozer]
          if(params_count(params)==2 && params_integer(2, params)) {
             Boozer_On(params[2]);
+         }
+         break;
+      case 0xd37e: //tlsf
+         {
+            unsigned char *mem;
+            unsigned int val;
+            pool_t pool;
+
+            pool = tlsf_get_pool(tlsf);
+            mysprintf(buf, "tlsf_get_pool: 0x%x", (unsigned int)pool);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_check(tlsf);
+            mysprintf(buf, "tlsf_check: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_check_pool(pool);
+            mysprintf(buf, "tlsf_check_pool: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_size();
+            mysprintf(buf, "tlsf_size: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_align_size();
+            mysprintf(buf, "tlsf_align_size: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_block_size_min();
+            mysprintf(buf, "tlsf_block_size_min: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_block_size_max();
+            mysprintf(buf, "tlsf_block_size_max: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_pool_overhead();
+            mysprintf(buf, "tlsf_pool_overhead: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            val = tlsf_alloc_overhead();
+            mysprintf(buf, "tlsf_alloc_overhead: %u", val);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+
+            for(t=2,i=2; i<12; i++) {
+               t *= 2;
+               mem = tlsf_malloc(tlsf, t);
+               mysprintf(buf, "req: %u, mem: 0x%x", t, (unsigned int)mem);
+               output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+               tlsf_walk_pool(pool, NULL, NULL); //antras parametras NULL reiskia default_walker
+               if(mem != NULL) {
+                  tlsf_free(tlsf, mem);
+                  output("after tlsf_free", eOutputSubsystemSystem, eOutputLevelImportant);
+                  tlsf_walk_pool(pool, NULL, NULL);
+               }
+            }
          }
          break;
       default:

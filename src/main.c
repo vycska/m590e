@@ -20,11 +20,12 @@
 #include "lpc824.h"
 #include "pt.h"
 #include "timer.h"
+#include "tlsf.h"
 #include <string.h>
 
 void DeepSleep_Init(void);
 
-extern char _data_start_lma, _data_start, _data_end, _bss_start, _bss_end;
+extern char _data_start_lma, _data_start, _data_end, _bss_start, _bss_end, _heap_start, _heap_end;
 extern char _flash_start, _flash_end, _ram_start, _ram_end;
 extern char _flash_size, _ram_size, _intvecs_size, _text_size, _rodata_size, _data_size, _bss_size, _stack_size, _heap_size;
 
@@ -36,6 +37,8 @@ extern struct VSwitch_Data vswitch_data;
 
 struct Fifo fifo_command_parser, fifo_m590e_responses;
 struct Main_Data main_data;
+
+tlsf_t tlsf;
 
 void main(void) {
    char *s, buf[32];
@@ -75,6 +78,8 @@ void main(void) {
    PT_INIT(&pt_m590e_smspir);
 
    Init_Print();
+
+   tlsf = tlsf_create_with_pool((void*)&_heap_start, (size_t)&_heap_size);
 
    ICPR0 = (3<<0 | 7<<3 | 0xffff<<7 | 0xff<<24); //clear pending interrupts
    _enable_irq();
@@ -263,7 +268,7 @@ void Init_Print(void) {
             mysprintf(buf, "_stack_size: %u", (unsigned int)&_stack_size);
             break;
          case 11:
-            mysprintf(buf, "_heap_size: %u", (unsigned int)&_heap_size);
+            mysprintf(buf, "_heap_size: %u [0x%x - 0x%x]", (unsigned int)&_heap_size, (unsigned int)&_heap_start, (unsigned int)&_heap_end);
             break;
          case 12:
             l = (int)&_intvecs_size + (int)&_text_size + (int)&_rodata_size + (int)&_data_size;
