@@ -17,7 +17,7 @@ COBJS := $(addprefix objs/,$(CSRCS:.c=.o))
 ASFLAGS := -Wa,--warn -Wa,--fatal-warnings
 CPPFLAGS := -I inc -I inc/pt -I inc/uip -I inc/tlsf -I /usr/arm-none-eabi/include
 CFLAGS := -march=armv6-m -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlittle-endian -ffreestanding -fsigned-char -fdata-sections -ffunction-sections -Wall -Werror -Wno-unused-but-set-variable -$(OPTIM)
-LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/8.2.0/thumb/v6-m/nofp -T $(TARGET).ld -Wl,-Map=$(TARGET).map -Wl,--cref -Wl,--gc-sections -Wl,--print-memory-usage -Wl,--stats -Wl,--print-output-form
+LDFLAGS := -nostdlib -nostartfiles -nodefaultlibs -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/8.3.0/thumb/v6-m/nofp -T $(TARGET).ld -Wl,-Map=$(TARGET).map -Wl,--cref -Wl,--gc-sections -Wl,--print-memory-usage -Wl,--stats -Wl,--print-output-form
 LDLIBS := -lm -lc_nano -lgcc -lnosys
 
 ifeq ($(DEBUG),1)
