@@ -61,7 +61,7 @@ void Handle_Command(char *pString) {
          }
          break;
       case 0x62bf: //x [value at address]
-         if(params_count(params)==2 && !params_integer(2,params)) {
+         if(params_count(params)==2 && !params_integer(params, 2)) {
             for(t=0, l=1,i=strlen((char*)params[2])-1; i>=2; l*= 16, i--)
                t += l * (((char*)params[2])[i]>='0' && ((char*)params[2])[i]<='9' ? (((char*)params[2])[i]-'0') : (((char*)params[2])[i]>='a' && ((char*)params[2])[i]<='f' ? (10+((char*)params[2])[i]-'a') : (0)));
             if((t&3)==0 && ((t>=(unsigned int)&_flash_start && t<=(unsigned int)&_flash_end) || (t>=(unsigned int)&_ram_start && t<=(unsigned int)&_ram_end))) {
@@ -95,7 +95,7 @@ void Handle_Command(char *pString) {
             }
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
-         else if(params_count(params)==2 && params_integer(2,params)) {
+         else if(params_count(params)==2 && params_integer(params, 2)) {
             m590e_data.pir_sms_interval = params[2];
          }
          break;
@@ -170,7 +170,7 @@ void Handle_Command(char *pString) {
          break;
       case 0xad7e: //m [m590e]
          for(l=0,i=2; i<=params_count(params); i++) {
-            if(params_integer(i, params))
+            if(params_integer(params, i))
                l += mysprintf(buf+l, i<params_count(params)?"%u ":"%c", params[i]);
             else
                l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
@@ -195,12 +195,12 @@ void Handle_Command(char *pString) {
                break;
             case 2:
                if(m590e_data.source_number == 0) {
-                  if(params_integer(2, params)) {
+                  if(params_integer(params, 2)) {
                      M590E_Periodic_Interval(params[2]);
                   }
                }
                else { //gautas sms
-                  if(params_integer(2, params)) {
+                  if(params_integer(params, 2)) {
                      if(params[2] == 0) {
                         M590E_Periodic_Clear(m590e_data.source_number);
                      }
@@ -214,8 +214,8 @@ void Handle_Command(char *pString) {
                }
                break;
             case 3:
-               if(m590e_data.source_number==0 && params_integer(2, params)) {
-                  if(params_integer(3, params)) {
+               if(m590e_data.source_number==0 && params_integer(params, 2)) {
+                  if(params_integer(params, 3)) {
                      if(params[3] == 0) {
                         M590E_Periodic_Clear(params[2]);
                      }
@@ -231,7 +231,7 @@ void Handle_Command(char *pString) {
          dump_print();
          break;
       case 0xa33e: //z [boozer]
-         if(params_count(params)==2 && params_integer(2, params)) {
+         if(params_count(params)==2 && params_integer(params, 2)) {
             Boozer_On(params[2]);
          }
          break;
@@ -277,7 +277,7 @@ void Handle_Command(char *pString) {
             mysprintf(buf, "tlsf_alloc_overhead: %u", val);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
 
-            t = (params_count(params)==2 && params_integer(2, params) ? params[2] : 100);
+            t = (params_count(params)==2 && params_integer(params, 2) ? params[2] : 100);
             mem = tlsf_malloc(tlsf, t);
             mysprintf(buf, "req: %u, mem: 0x%x", t, (unsigned int)mem);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
@@ -322,6 +322,6 @@ int params_count(unsigned int *params) { //kiek parametru uzpildyta po params_fi
    return params[0] & 0xff;
 }
 
-int params_integer(char k, unsigned int *params) { //ar paremetras #k yra integer'is, jei ne -- jis yra pointeris i stringa
+int params_integer(unsigned int *params, int k) { //ar paremetras #k yra integer'is, jei ne -- jis yra pointeris i stringa
    return ((params[0] >> 16) & (1 << k)) != 0;
 }

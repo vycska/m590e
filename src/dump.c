@@ -13,9 +13,10 @@ struct Dump {
 static struct Dump dump;
 
 void dump_put(unsigned char c) {
-   if(dump.index < DUMP_SIZE)
+   if(dump.index < DUMP_SIZE) {
       dump.data[dump.index] = c;
-   dump.index += 1;
+      dump.index += 1;
+   }
 }
 
 void dump_print(void) {
