@@ -304,24 +304,27 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                      PT_YIELD(pt); //susispenduojam, kad ivyktu komandos apdorojimas
                      m590e_data.source_number = 0;
                   }
+                  else { //gal issiusti sita neaiskia zinute man paciam?
+                     m590e_data.source_number = 7; //sitas yra mano numeris !!!
+                     output(m590e_data.response[0], eOutputSubsystemM590E, eOutputLevelImportant);
+                     output(m590e_data.response[1], eOutputSubsystemM590E, eOutputLevelImportant);
+                     m590e_data.source_number = 0;
+                  }
+                  l = mysprintf(buf, "AT+CMGD=%d\r", it);
+                  PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+                  if(strcmp(m590e_data.response[0], "OK") == 0) {
+                     strcpy(buf+l-1, " ok");
+                     output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+                  }
+                  else {
+                     strcpy(buf+l-1, " error");
+                     output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+                  }
                }
                else {
                   strcpy(buf+l-1, " error");
                   output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                }
-            }
-            status = 3;
-            break;
-         case 3:
-            l = mysprintf(buf, "AT+CMGD=1,1\r");
-            PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
-            if(strcmp(m590e_data.response[0],"OK")==0) {
-               strcpy(buf+l-1, " ok");
-               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
-            }
-            else {
-               strcpy(buf+l-1, " error");
-               output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             }
             status = 1;
             break;
