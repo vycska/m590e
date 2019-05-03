@@ -9,6 +9,7 @@
 #include "main.h"
 #include "mrt.h"
 #include "output.h"
+#include "siren.h"
 #include "systick.h"
 #include "uart.h"
 #include "utils.h"
@@ -233,6 +234,11 @@ void Handle_Command(char *pString) {
       case 0xa33e: //z [boozer]
          if(params_count(params)==2 && params_integer(params, 2)) {
             Boozer_On(params[2]);
+         }
+         break;
+      case 0xa5fe: // s [siren]
+         if(params_count(params)==2 && params_integer(params, 2)) {
+            Siren_On(params[2]);
          }
          break;
       case 0xd37e: //tlsf

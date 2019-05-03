@@ -11,6 +11,7 @@
 #include "led.h"
 #include "m590e.h"
 #include "mrt.h"
+#include "siren.h"
 #include "systick.h"
 #include "output.h"
 #include "vswitch.h"
@@ -33,6 +34,7 @@ extern struct pt pt_m590e_smsinit, pt_m590e_smsparse, pt_m590e_smssend, pt_m590e
 extern struct Boozer_Data boozer_data;
 extern struct HCSR501_Data hcsr501_data;
 extern struct M590E_Data m590e_data;
+extern struct Siren_Data siren_data;
 extern struct VSwitch_Data vswitch_data;
 
 struct Fifo fifo_command_parser, fifo_m590e_responses;
@@ -67,6 +69,7 @@ void main(void) {
    DS18B20_Init(); //P0.9
    HCSR501_Init(); //P0.8
    M590E_Init(); //P0.2, P0.3, P0.13, P0.17
+   Siren_Init(); //P0.1
 
    Fifo_Init(&fifo_command_parser);
    Fifo_Init(&fifo_m590e_responses);
@@ -159,7 +162,7 @@ void main(void) {
       }
 
       _disable_irq();
-      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active && !boozer_data.active && !hcsr501_data.active) {
+      if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active && !boozer_data.active && !siren_data.active && !hcsr501_data.active) {
          _enable_irq();
          M590E_Sleep_Enter();
          timer_set(&timer, 1000);
@@ -167,6 +170,7 @@ void main(void) {
          Systick_Stop();
          LED_Off();
          Boozer_Off(); //jeigu kartais per si pasiruosimo sleep'inti laikotarpi isijungtu boozer'is
+         Siren_Off();
          _wfi();
          LED_On();
          Systick_Start();

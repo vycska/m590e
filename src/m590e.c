@@ -80,6 +80,7 @@ void M590E_Send_Blocking(char *msg, int len, int k, int delay) {
    char *s;
    int i;
    struct timer timer;
+   Fifo_Clear(&fifo_m590e_responses);
    UART1_Transmit(msg, len);
    output(msg, eOutputSubsystemSystem, k>0?eOutputLevelImportant:eOutputLevelDebug);
    for(i=0; i<ABS(k) && i<MAX_RESPONSES; i++) {
@@ -103,6 +104,7 @@ PT_THREAD(M590E_Send(struct pt *pt, char *msg, int len, int k, int delay)) {
    static struct timer timer;
 
    PT_BEGIN(pt);
+   Fifo_Clear(&fifo_m590e_responses);
    UART1_Transmit(msg, len);
    for(i=0; i<k && i<MAX_RESPONSES; i++) {
       timer_set(&timer, delay);
@@ -129,8 +131,6 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
    m590e_data.mutex = 0;
-
-   Fifo_Clear(&fifo_m590e_responses);
 
    status = 2;
    while(status) {
@@ -267,8 +267,6 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
 
    m590e_data.mutex = 0;
 
-   Fifo_Clear(&fifo_m590e_responses);
-
    status = 1;
    while(status) {
       switch(status) {
@@ -326,6 +324,18 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                   output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                }
             }
+            if(!(ik==k && it<=t)) { //kazkas negerai su zinuciu nuskaitymu
+               l = mysprintf(buf, "AT+CMGD=0,1\r");
+               PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2000));
+               if(strcmp(m590e_data.response[0], "OK") == 0) {
+                  strcpy(buf+l-1, " ok");
+                  output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+               }
+               else {
+                  strcpy(buf+l-1, " error");
+                  output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+               }
+            }
             status = 1;
             break;
       }
@@ -347,8 +357,6 @@ PT_THREAD(M590E_SMSSend(struct pt *pt)) {
    PT_WAIT_UNTIL(pt, m590e_data.mutex==1);
 
    m590e_data.mutex = 0;
-
-   Fifo_Clear(&fifo_m590e_responses);
 
    status = 1;
    while(status) {

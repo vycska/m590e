@@ -4,6 +4,7 @@
 #include "hcsr501.h"
 #include "m590e.h"
 #include "main.h"
+#include "siren.h"
 #include "vswitch.h"
 #include "lpc824.h"
 
@@ -11,6 +12,7 @@ extern struct Boozer_Data boozer_data;
 extern struct HCSR501_Data hcsr501_data;
 extern struct M590E_Data m590e_data;
 extern struct Main_Data main_data;
+extern struct Siren_Data siren_data;
 extern struct VSwitch_Data vswitch_data;
 
 struct Systick_Data systick_data;
@@ -80,5 +82,8 @@ void Systick_Handler(void) {
    if(boozer_data.active && boozer_data.duration>=0) { //jei duration neigiamas reiskia boozer'is paleistas neribota laiko intervala
       if(--boozer_data.duration <= 0)
          Boozer_Off();
+   }
+   if(siren_data.active && --siren_data.duration<=0) {
+      Siren_Off();
    }
 }
