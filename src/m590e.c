@@ -69,7 +69,9 @@ void PININT1_IRQHandler(void) {
    FALL = (1<<1); //clear detected falling edge
    main_data.wakeup_cause |= (1<<eWakeupCauseRingActive);
    if(m590e_data.ring_active == 0) {
-      if(!boozer_data.active) Boozer_On(200);
+      if(boozer_data.enabled && !boozer_data.active) {
+         Boozer_On(200);
+      }
       m590e_data.ring_active = 1;
       m590e_data.ring_delay = 0;
       m590e_data.ring_duration = 0;

@@ -83,7 +83,9 @@ void Systick_Handler(void) {
       if(--boozer_data.duration <= 0)
          Boozer_Off();
    }
-   if(siren_data.active && --siren_data.duration<=0) {
-      Siren_Off();
+   if(siren_data.active && siren_data.duration>=0) {
+      if(--siren_data.duration <= 0) {
+         Siren_Off();
+      }
    }
 }

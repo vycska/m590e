@@ -21,9 +21,11 @@
 
 extern char _flash_start, _flash_end, _ram_start, _ram_end, _heap_start;
 extern tlsf_t tlsf;
+extern struct Boozer_Data boozer_data;
 extern struct M590E_Data m590e_data;
 extern struct Main_Data main_data;
 extern struct Output_Data output_data;
+extern struct Siren_Data siren_data;
 extern struct Systick_Data systick_data;
 
 void Handle_Command(char *pString) {
@@ -233,12 +235,43 @@ void Handle_Command(char *pString) {
          break;
       case 0xa33e: //z [boozer]
          if(params_count(params)==2 && params_integer(params, 2)) {
-            Boozer_On(params[2]);
+            switch(params[2]) {
+               case 0:
+                  boozer_data.enabled = 0;
+                  break;
+               case 1:
+                  boozer_data.enabled = 1;
+                  break;
+               default:
+                  if(boozer_data.enabled) {
+                     Boozer_On(params[2]);
+                  }
+                  break;
+            }
          }
          break;
       case 0xa5fe: // s [siren]
-         if(params_count(params)==2 && params_integer(params, 2)) {
-            Siren_On(params[2]);
+         if(params_count(params) == 1) {
+            mysprintf(buf, "%d", siren_data.pir_time);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         }
+         else if(params_count(params)==2 && params_integer(params, 2)) {
+            switch(params[2]) {
+               case 0:
+                  siren_data.enabled = 0;
+                  break;
+               case 1:
+                  siren_data.enabled = 1;
+                  break;
+               default:
+                  if(siren_data.enabled) {
+                     Siren_On(params[2]);
+                  }
+                  break;
+            }
+         }
+         else if(params_count(params)==3 && !params_integer(params, 2) && strcmp((char*)params[2], "pir")==0 && params_integer(params, 3)) {
+            siren_data.pir_time = params[3];
          }
          break;
       case 0xd37e: //tlsf

@@ -1,21 +1,28 @@
 #include "config.h"
+#include "boozer.h"
 #include "iap.h"
 #include "led.h"
 #include "m590e.h"
 #include "output.h"
+#include "siren.h"
 #include "uart.h"
 #include "utils.h"
 #include "lpc824.h"
 #include <string.h>
 
+extern struct Boozer_Data boozer_data;
 extern struct M590E_Data m590e_data;
 extern struct Output_Data output_data;
+extern struct Siren_Data siren_data;
 
 struct Config_Data config_data[] = {
    {(unsigned char*)output_data.mask,                    sizeof(output_data.mask)},
    {(unsigned char*)m590e_data.periodic_sms,             sizeof(m590e_data.periodic_sms)},
    {(unsigned char*)&m590e_data.periodic_sms_interval,   sizeof(m590e_data.periodic_sms_interval)},
-   {(unsigned char*)&m590e_data.pir_sms_interval,        sizeof(m590e_data.pir_sms_interval)}
+   {(unsigned char*)&m590e_data.pir_sms_interval,        sizeof(m590e_data.pir_sms_interval)},
+   {(unsigned char*)&boozer_data.enabled,                sizeof(boozer_data.enabled)},
+   {(unsigned char*)&siren_data.enabled,                 sizeof(siren_data.enabled)},
+   {(unsigned char*)&siren_data.pir_time,                sizeof(siren_data.pir_time)}
 };
 
 enum Config_Result config(enum Config_Mode mode) {

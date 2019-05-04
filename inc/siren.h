@@ -2,6 +2,7 @@
 #define _SIREN_H_
 
 struct Siren_Data {
+   int enabled, pir_time;
    volatile int active, duration;
 };
 

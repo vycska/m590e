@@ -2,6 +2,7 @@
 #define __BOOZER_H__
 
 struct Boozer_Data {
+   int enabled;
    volatile int active, duration;
 };
 

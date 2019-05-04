@@ -2,10 +2,13 @@
 #include "boozer.h"
 #include "m590e.h"
 #include "main.h"
+#include "siren.h"
 #include "lpc824.h"
 
+extern struct Boozer_Data boozer_data;
 extern struct M590E_Data m590e_data;
 extern struct Main_Data main_data;
+extern struct Siren_Data siren_data;
 
 struct HCSR501_Data hcsr501_data;
 
@@ -30,8 +33,13 @@ void PININT2_IRQHandler(void) {
    CIENR = (1<<2); //disable rising edge interrupt for pin selected in PINTSEL2
    RISE = (1<<2); //clear rising edge detection
    main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501Start);
-   if(hcsr501_data.active==0) {
-      Boozer_On(-1);
+   if(hcsr501_data.active == 0) {
+      if(boozer_data.enabled) {
+         Boozer_On(-1);
+      }
+      if(siren_data.enabled) {
+         Siren_On(siren_data.pir_time);
+      }
       hcsr501_data.active = 1;
       hcsr501_data.delay = 0;
       hcsr501_data.duration = 0;
