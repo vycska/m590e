@@ -350,7 +350,7 @@ void params_fill(char *s, unsigned int *params) {
          p = &s[i+1];
       }
       else {
-         d = d && isdigit(s[i]);
+         d = d && isdigit((int)s[i]);
       }
    }
    params[0] |= (k&0xff);
