@@ -4,6 +4,7 @@
 #include "main.h"
 #include "mrt.h"
 #include "output.h"
+#include "siren.h"
 #include "uart.h"
 #include "utils.h"
 #include "lpc824.h"
@@ -16,6 +17,7 @@ extern struct Fifo fifo_command_parser;
 extern struct Fifo fifo_m590e_responses;
 extern struct Boozer_Data boozer_data;
 extern struct Main_Data main_data;
+extern struct Siren_Data siren_data;
 
 struct pt pt_m590e_smsparse,
           pt_m590e_smssend,
@@ -223,7 +225,7 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
             l = mysprintf(buf, "AT+CCLK?\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
             if(strcmp(m590e_data.response[1],"OK")==0) {
-               m590e_data.pir_last_time = str2unixtime(m590e_data.response[0]);
+               m590e_data.init_time = str2unixtime(m590e_data.response[0]);
                status = 8;
                strcpy(buf+l-1, " ok");
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
@@ -299,8 +301,9 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                   output(m590e_data.response[1], eOutputSubsystemM590E, eOutputLevelDebug);
                   if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=NULL && (s=strstr(s, "+370"))!=NULL) {
                      Fifo_Put(&fifo_command_parser, m590e_data.response[1]);
-                     s[MAX_SRC_SIZE-1] = '\0';
-                     m590e_data.source_number = M590E_PhoneBook_Add(s); //sitas pakeis response[] masyva
+                     strncpy(buf, s, MAX_SRC_SIZE-1); //nukopijuojam numeri i buferi
+                     buf[MAX_SRC_SIZE-1] = '\0';
+                     m590e_data.source_number = M590E_PhoneBook_Add(buf); //sitas pakeis response[] masyva
                      PT_YIELD(pt); //susispenduojam, kad ivyktu komandos apdorojimas
                      m590e_data.source_number = 0;
                   }
@@ -466,7 +469,7 @@ PT_THREAD(M590E_SMSPeriodic(struct pt *pt)) {
 PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
    static char buf[16];
    static int i, j, l, status;
-   int t;
+   int t = 0;
 
    PT_BEGIN(pt);
 
@@ -482,6 +485,7 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2000));
             if(strcmp(m590e_data.response[1], "OK")==0) {
                status = 2;
+               t = str2unixtime(m590e_data.response[0]);
                strcpy(buf+l-1, " ok");
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             }
@@ -491,15 +495,29 @@ PT_THREAD(M590E_SMSPIR(struct pt *pt)) {
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
             }
             break;
-         case 2:
-            t = str2unixtime(m590e_data.response[0]);
-            if(t-m590e_data.pir_last_time >= m590e_data.pir_sms_interval) {
-               status = 3;
-               m590e_data.pir_last_time = t;
+         case 2: //tikrinam pagal sirenos paleidimo
+            if(t-m590e_data.pir_last_time >= 30) { //30 sek intervalas
+               m590e_data.pir_count = 1;
             }
-            else status = 0;
+            else {
+               m590e_data.pir_count += 1;
+               if(m590e_data.pir_count >=3 && siren_data.enabled) {
+                  Siren_On(siren_data.pir_time);
+               }
+            }
+            m590e_data.pir_last_time = t;
+            status = 3;
             break;
-         case 3:
+         case 3: //tikrinam del sms siuntimo
+            if(t-m590e_data.init_time>=60 && t-m590e_data.pir_last_sms_time >= m590e_data.pir_sms_interval) { //per pirmas 60 sek sms nesiunciam
+               status = 4;
+               m590e_data.pir_last_sms_time = t;
+            }
+            else {
+               status = 0;
+            }
+            break;
+         case 4: //sms siuntimas
             for(i=0; i<PERIODIC_SMS_RECIPIENTS; i++) { //PIR zinute gaus tie kas uzsisake periodini "pir" gavima
                if(m590e_data.periodic_sms[i].src_index != 0) {
                   for(j=0; j<PERIODIC_SMS_COMMANDS && strcmp(m590e_data.periodic_sms[i].commands[j], "pir")!=0; j++);
@@ -558,14 +576,14 @@ void M590E_Periodic_Clear(int src_index) {
 int M590E_PhoneBook_Add(char *src) { //funkcija grazina telefono indeksa phone book'e [jei reikia, iraso]
    char *p, buf[64];
    int pb_index, l;
-   l = mysprintf(buf, "AT+CPBF=\"%s\"\r", src);
+   l = mysprintf(buf, "AT+CPBF=\"%s\"\r", src); //pabandom surasti numeri knygeleje
    M590E_Send_Blocking(buf, l, -2, 10000);
-   if(strcmp(m590e_data.response[0], "OK")==0) {
-      l = mysprintf(buf, "AT+CPBS?\r");
+   if(strcmp(m590e_data.response[0], "OK")==0) { //tokio numerio knygeleje nera
+      l = mysprintf(buf, "AT+CPBS?\r"); //kiek yra laisvu vietu knygeleje
       M590E_Send_Blocking(buf, l, -2, 2000);
       if(strcmp(m590e_data.response[1], "OK")==0 && (p=strstr(m590e_data.response[0], "\"SM\","))!=NULL) {
          pb_index = atoi(p+5) + 1; //5 yra "'SM'," ilgis
-         l = mysprintf(buf, "AT+CPBW=%d,\"%s\",145,\"%s\"\r", pb_index, src, src);
+         l = mysprintf(buf, "AT+CPBW=%d,\"%s\",145,\"%s\"\r", pb_index, src, src); //irasom numeri i knygele
          M590E_Send_Blocking(buf, l, -1, 2000);
          if(strcmp(m590e_data.response[0], "OK")!=0) pb_index = 0;
       }

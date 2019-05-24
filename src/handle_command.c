@@ -53,12 +53,11 @@ void Handle_Command(char *pString) {
          output(config_save_result==eConfigResultOK ? "ok" : "error",eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x1804: //iflash_write
-         if(params_count(params)>2 && params_count(params)<=6) {
-            unsigned char data[4];
+         if(params_count(params)==3 && params_integer(params, 2) && params_integer(params, 3)) {
+            unsigned char data;
             int res;
-            for(i=0; i<params_count(params)-2; i++)
-               data[i] = params[3+i];
-            res = iflash_write(params[2], data, i);
+            data = params[3];
+            res = iflash_write(params[2], &data, 1);
             mysprintf(buf, res?"ok":"error");
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
@@ -82,9 +81,9 @@ void Handle_Command(char *pString) {
          break;
       case 0x7327: //time
          M590E_Send_Blocking("AT+CCLK?\r",9,-2,2000);
-         if(strcmp(m590e_data.response[1],"OK")==0) {
-            t = str2unixtime(m590e_data.response[0]);
-            mysprintf(buf, "%d", t);
+         if(strcmp(m590e_data.response[1],"OK")==0 && m590e_data.init_time!=0) {
+            t = str2unixtime(m590e_data.response[0]) - m590e_data.init_time;
+            mysprintf(buf, "%u,%u:%u:%u", t/60/60/24, t/60/60%24, t/60%60, t%60);
             output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          }
          break;
@@ -361,6 +360,6 @@ int params_count(unsigned int *params) { //kiek parametru uzpildyta po params_fi
    return params[0] & 0xff;
 }
 
-int params_integer(unsigned int *params, int k) { //ar paremetras #k yra integer'is, jei ne -- jis yra pointeris i stringa
+int params_integer(unsigned int *params, int k) { //ar parametras #k yra integer'is, jei ne -- jis yra pointeris i stringa
    return ((params[0] >> 16) & (1 << k)) != 0;
 }

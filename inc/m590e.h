@@ -26,7 +26,14 @@ struct Periodic_SMS {
 
 struct M590E_Data {
    char response[MAX_RESPONSES][MAX_RESPONSE_SIZE];
-   int ready, source_number, pir_last_time, pir_sms_interval, periodic_sms_interval;
+   int ready,
+       source_number,
+       init_time,
+       pir_count,
+       pir_last_time,
+       pir_last_sms_time,
+       pir_sms_interval,
+       periodic_sms_interval;
    volatile int mutex, ring_active, ring_delay, ring_duration;
    struct Periodic_SMS periodic_sms[PERIODIC_SMS_RECIPIENTS];
 };

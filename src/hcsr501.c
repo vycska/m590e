@@ -37,9 +37,6 @@ void PININT2_IRQHandler(void) {
       if(boozer_data.enabled) {
          Boozer_On(-1);
       }
-      if(siren_data.enabled) {
-         Siren_On(siren_data.pir_time);
-      }
       hcsr501_data.active = 1;
       hcsr501_data.delay = 0;
       hcsr501_data.duration = 0;
