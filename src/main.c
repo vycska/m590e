@@ -111,7 +111,7 @@ void main(void) {
          }
 
          if((cause&(1<<eWakeupCauseRingActive)) != 0) {
-            if(!m590e_data.ring_active) {
+            if(!m590e_data.ring_active) { //ring signala apdorosiu, kai jis gris is savo aktyvaus level'io
                if(m590e_data.ready==0 || PT_SCHEDULE(M590E_SMSParse(&pt_m590e_smsparse))==0) {
                   _disable_irq();
                   main_data.wakeup_cause &= (~(1<<eWakeupCauseRingActive));
@@ -161,17 +161,17 @@ void main(void) {
          }
       }
 
-      _disable_irq();
       if(main_data.wakeup_cause==0 && !vswitch_data.active && !m590e_data.ring_active && !boozer_data.active && !siren_data.active && !hcsr501_data.active) {
-         _enable_irq();
-         M590E_Sleep_Enter();
-         timer_set(&timer, 1000);
+         timer_set(&timer, 1000); //pries uzmigdant m590e, biski palaukiam
          while(!timer_expired(&timer));
+         M590E_Sleep_Enter();
          Systick_Stop();
-         LED_Off();
          Boozer_Off(); //jeigu kartais per si pasiruosimo sleep'inti laikotarpi isijungtu boozer'is
          Siren_Off();
-         _wfi();
+         LED_Off();
+         if(main_data.wakeup_cause == 0) { //dar karta patikrinam, ar per si pasiruosimo sleep'inti laika kas nors neivyko
+            _wfi();
+         }
          LED_On();
          Systick_Start();
          ADC_Calibrate();
@@ -179,7 +179,6 @@ void main(void) {
          while(!timer_expired(&timer));
          M590E_Sleep_Exit();
       }
-      _enable_irq();
    }
 }
 

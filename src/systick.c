@@ -74,6 +74,7 @@ void Systick_Handler(void) {
          hcsr501_data.active = 0;
          hcsr501_data.delay = 0;
          hcsr501_data.duration -= 200;
+         ICPR0 = (1<<26); //clear pending interrupts
          RISE = (1<<2);
          SIENR = (1<<2);
          main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501End);

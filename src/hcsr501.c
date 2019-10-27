@@ -22,6 +22,7 @@ void HCSR501_Init(void) {
    SIENR = (1<<2); //enable rising edge interrupt for pin selected in PINTSEL2; this is indirect register which operates on IENR register
    CIENF = (1<<2); //disable falling edge interrupt for pin selected in PINTSEL2
    IPR6 = (IPR6&(~(3<<22))) | (1<<22); //PININT2 priority 1 (0 = highest, 3 = lowest)
+   ICPR0 = (1<<26); //clear pending interrupts
    ISER0 = (1<<26); //enable PININT2
 }
 
@@ -32,8 +33,9 @@ int HCSR501_Active(void) {
 void PININT2_IRQHandler(void) {
    CIENR = (1<<2); //disable rising edge interrupt for pin selected in PINTSEL2
    RISE = (1<<2); //clear rising edge detection
-   main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501Start);
+   ICPR0 = (1<<26); //clear pending interrupts
    if(hcsr501_data.active == 0) {
+      main_data.wakeup_cause |= (1<<eWakeupCauseHCSR501Start);
       if(boozer_data.enabled) {
          Boozer_On(-1);
       }
