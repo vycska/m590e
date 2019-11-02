@@ -13,8 +13,8 @@
 #define MAX_INIT_TRIES 5
 
 #define PERIODIC_SMS_RECIPIENTS 4
-#define PERIODIC_SMS_COMMANDS 4
-#define PERIODIC_SMS_COMMAND_SIZE 10
+#define PERIODIC_SMS_COMMANDS 5
+#define PERIODIC_SMS_COMMAND_SIZE 8
 
 #define OK 0
 #define ER 1
@@ -29,6 +29,7 @@ struct M590E_Data {
    int ready,
        source_number,
        init_time,
+       unit_delay, //laiko tarpas kuris bus dauginamas is koeficientu laukiant atsakymu is m590e (koeficientai priklausys nuo komandu, o sitas delay'us bus keiciamas -- jeigu padidinamas bus ilgiau laukiama)
        pir_count,
        pir_last_time,
        pir_last_sms_time,

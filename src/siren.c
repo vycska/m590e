@@ -8,6 +8,9 @@ void Siren_Init(void) {
    PIO0_1 = (0<<3 | 0<<5 | 0<<6 | 0<<10 | 0<<11 | 0<<13); //no pu/pd resistor, no hysteresis, input not inverted, no OD mode, no input filter
    DIR0 |= (1<<1); //direction is output
    Siren_Off();
+   if(siren_data.pir_time == 0) {
+      siren_data.pir_time = 15000; //15 sek kaukimas suveikus pir
+   }
 }
 
 void Siren_On(int dur) {

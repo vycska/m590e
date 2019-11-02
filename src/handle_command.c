@@ -48,9 +48,29 @@ void Handle_Command(char *pString) {
          mysprintf(buf, "%u", systick_data.millis);
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
-      case 0x426e: //config_save
-         config_save_result = config(eConfigModeSave);
-         output(config_save_result==eConfigResultOK ? "ok" : "error",eOutputSubsystemSystem, eOutputLevelImportant);
+      case 0xcc4e: //config
+         if(params_count(params) == 1) {
+            mysprintf(buf, "output_data.mask: ...");
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "m590e_data.periodic_sms: ...");
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "m590e_data.periodic_sms_interval: %d", m590e_data.periodic_sms_interval);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "m590e_data.pir_sms_interval: %d", m590e_data.pir_sms_interval);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "boozer_data.enabled: %d", boozer_data.enabled);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "siren_data.enabled: %d", siren_data.enabled);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "siren_data.pir_time: %d", siren_data.pir_time);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+            mysprintf(buf, "m590e_data.unit_delay: %d", m590e_data.unit_delay);
+            output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
+         }
+         else if(params_count(params)==2 && !params_integer(params, 2) && strcmp((char*)params[2], "save")==0) {
+            config_save_result = config(eConfigModeSave);
+            output(config_save_result==eConfigResultOK ? "ok" : "error",eOutputSubsystemSystem, eOutputLevelImportant);
+         }
          break;
       case 0x1804: //iflash_write
          if(params_count(params)==3 && params_integer(params, 2) && params_integer(params, 3)) {
@@ -80,7 +100,7 @@ void Handle_Command(char *pString) {
          output(buf, eOutputSubsystemSystem, eOutputLevelImportant);
          break;
       case 0x7327: //time
-         M590E_Send_Blocking("AT+CCLK?\r",9,-2,2000);
+         M590E_Send_Blocking("AT+CCLK?\r", 9, -2, 2*m590e_data.unit_delay);
          if(strcmp(m590e_data.response[1],"OK")==0 && m590e_data.init_time!=0) {
             t = str2unixtime(m590e_data.response[0]) - m590e_data.init_time;
             mysprintf(buf, "%u,%u:%u:%u", t/60/60/24, t/60/60%24, t/60%60, t%60);
@@ -171,13 +191,18 @@ void Handle_Command(char *pString) {
          }
          break;
       case 0xad7e: //m [m590e]
-         for(l=0,i=2; i<=params_count(params); i++) {
-            if(params_integer(params, i))
-               l += mysprintf(buf+l, i<params_count(params)?"%u ":"%c", params[i]);
-            else
-               l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
+         if(params_count(params)==3 && !params_integer(params, 2) && strcmp((char*)params[2], "delay")==0 && params_integer(params, 3)) {
+            m590e_data.unit_delay = params[3];
          }
-         M590E_Send_Blocking(buf, l, MAX_RESPONSES, 5000);
+         else {
+            for(l=0,i=2; i<=params_count(params); i++) {
+               if(params_integer(params, i))
+                  l += mysprintf(buf+l, i<params_count(params)?"%u ":"%c", params[i]);
+               else
+                  l += mysprintf(buf+l, "%s%c", (char*)params[i], i<params_count(params)?' ':'\r');
+            }
+            M590E_Send_Blocking(buf, l, MAX_RESPONSES, 5*m590e_data.unit_delay);
+         }
          break;
       case 0xa4be: //p [periodic sms]
          switch(params_count(params)) {

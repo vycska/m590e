@@ -1,7 +1,7 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-#define CONFIG_VERSION (7)
+#define CONFIG_VERSION (8)
 
 struct Config_Data {
    unsigned char *address_in_ram;

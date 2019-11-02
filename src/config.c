@@ -22,15 +22,15 @@ struct Config_Data config_data[] = {
    {(unsigned char*)&m590e_data.pir_sms_interval,        sizeof(m590e_data.pir_sms_interval)},
    {(unsigned char*)&boozer_data.enabled,                sizeof(boozer_data.enabled)},
    {(unsigned char*)&siren_data.enabled,                 sizeof(siren_data.enabled)},
-   {(unsigned char*)&siren_data.pir_time,                sizeof(siren_data.pir_time)}
+   {(unsigned char*)&siren_data.pir_time,                sizeof(siren_data.pir_time)},
+   {(unsigned char*)&m590e_data.unit_delay,              sizeof(m590e_data.unit_delay)}
 };
 
 enum Config_Result config(enum Config_Mode mode) {
    int i, error;
    short total_size, config_version;
    unsigned int p;
-   for(config_version=CONFIG_VERSION,total_size=0,i=0; i<sizeof(config_data)/sizeof(struct Config_Data); i++)
-      total_size += config_data[i].size;
+   for(config_version=CONFIG_VERSION,total_size=0,i=0; i<sizeof(config_data)/sizeof(struct Config_Data); total_size+=config_data[i++].size);
    for(error=0,p=32768,i=-2; i<(int)(sizeof(config_data)/sizeof(struct Config_Data)) && !error; i++) {
       switch(i) {
          case -2:
