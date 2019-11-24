@@ -272,8 +272,8 @@ PT_THREAD(M590E_SMSInit(struct pt *pt)) {
 
 PT_THREAD(M590E_SMSParse(struct pt *pt)) {
    static char buf[32];
-   static int l, ik, k, it, t, status;
-   char *s;
+   static int l, i, j, k, sms_used_count, sms_total_count, state;
+   char *s, *t;
 
    PT_BEGIN(pt);
 
@@ -281,40 +281,47 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
 
    m590e_data.mutex = 0;
 
-   status = 1;
-   while(status) {
-      switch(status) {
+   state = 1;
+   while(state) {
+      switch(state) {
          case 1: //paziurim kiek yra zinuciu
             l = mysprintf(buf, "AT+CPMS?\r");
             PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 2, 2*m590e_data.unit_delay));
-            if(strcmp(m590e_data.response[1], "OK")==0 && (s=strstr(m590e_data.response[0], "\"SM\","))!=NULL && (k=atoi(s+5),(s=strstr(s+5,","))!=NULL)) {
-               status = (k>0 ? 2 : 0);
-               t = atoi(s+1);
-               mysprintf(buf+l-1, " ok [%d, %d]", k, t);
+            if(strcmp(m590e_data.response[1], "OK")==0 && (s=strstr(m590e_data.response[0], "\"SM\","))!=NULL && (sms_used_count=atoi(s+5),(s=strstr(s+5,","))!=NULL)) {
+               sms_total_count = atoi(s+1);
+               mysprintf(buf+l-1, " ok [%d, %d]", sms_used_count, sms_total_count);
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+               state = (sms_used_count>0 ? 2 : 0);
             }
             else {
-               status = 0;
                strcpy(buf+l-1, " error");
                output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
+               state = 0;
             }
             break;
          case 2: //perskaitom zinutes
-            for(ik=0,it=1; ik<k && it<=t; it++) {
-               l = mysprintf(buf,"AT+CMGR=%d\r",it);
+            for(i=0,k=1; i<sms_used_count && k<=sms_total_count; k++) {
+               l = mysprintf(buf,"AT+CMGR=%d\r",k);
                PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 3, 2*m590e_data.unit_delay));
                if(strcmp(m590e_data.response[2], "OK")==0) {
-                  ik += 1;
+                  i += 1;
                   strcpy(buf+l-1, " ok");
                   output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                   output(m590e_data.response[0], eOutputSubsystemM590E, eOutputLevelDebug);
                   output(m590e_data.response[1], eOutputSubsystemM590E, eOutputLevelDebug);
                   if((s=strstr(m590e_data.response[0], "REC UNREAD"))!=NULL && (s=strstr(s, "+370"))!=NULL) {
-                     Fifo_Put(&fifo_command_parser, m590e_data.response[1]);
+                     for(l=strlen(m590e_data.response[1]), j=0; j<l; j+=(t-&m590e_data.response[1][j]+1)) {
+                        t = strchr(&m590e_data.response[1][j], ';'); //komandos viename sms'e gali buti atskirtos kabliataskiais
+                        if(t == NULL) {
+                           t = &m590e_data.response[1][l];
+                        }
+                        *t = '\0';
+                        Fifo_Put(&fifo_command_parser, m590e_data.response[1]+j);
+                     }
                      strncpy(buf, s, MAX_SRC_SIZE-1); //nukopijuojam numeri i buferi
                      buf[MAX_SRC_SIZE-1] = '\0';
                      m590e_data.source_number = M590E_PhoneBook_Add(buf); //sitas pakeis response[] masyva
-                     PT_YIELD(pt); //susispenduojam, kad ivyktu komandos apdorojimas
+                     PT_YIELD(pt); //susispenduojam, kad ivyktu komandu apdorojimas
                      m590e_data.source_number = 0;
                   }
                   else { //gal issiusti sita neaiskia zinute man paciam?
@@ -323,7 +330,7 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                      output(m590e_data.response[1], eOutputSubsystemM590E, eOutputLevelImportant);
                      m590e_data.source_number = 0;
                   }
-                  l = mysprintf(buf, "AT+CMGD=%d\r", it);
+                  l = mysprintf(buf, "AT+CMGD=%d\r", k);
                   PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2*m590e_data.unit_delay));
                   if(strcmp(m590e_data.response[0], "OK") == 0) {
                      strcpy(buf+l-1, " ok");
@@ -339,7 +346,7 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                   output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                }
             }
-            if(!(ik==k && it<=t)) { //kazkas negerai su zinuciu nuskaitymu
+            if(!(i==sms_used_count && k<=sms_total_count)) { //kazkas negerai su zinuciu nuskaitymu
                l = mysprintf(buf, "AT+CMGD=0,1\r");
                PT_SPAWN(pt, &pt_m590e_send, M590E_Send(&pt_m590e_send, buf, l, 1, 2*m590e_data.unit_delay));
                if(strcmp(m590e_data.response[0], "OK") == 0) {
@@ -351,7 +358,7 @@ PT_THREAD(M590E_SMSParse(struct pt *pt)) {
                   output(buf, eOutputSubsystemM590E, eOutputLevelDebug);
                }
             }
-            status = 1;
+            state = 1;
             break;
       }
    }
